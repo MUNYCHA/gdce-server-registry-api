@@ -1,0 +1,23 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/serverregistry
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  sql:
+    init:
+      mode: always
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    # Must stay false: schema.sql has to run before Hibernate's ddl-auto=validate,
+    # otherwise validation fails with "missing table [servers]" on an empty database.
+    defer-datasource-initialization: false
+    # Nothing is lazy-loaded and the controller maps to records before serialising, so a
+    # request-scoped session buys nothing. Off explicitly, rather than left to the default.
+    open-in-view: false
+
+healthcheck:
+  timeout-ms: 3000

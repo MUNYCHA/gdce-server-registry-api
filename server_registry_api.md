@@ -1,0 +1,404 @@
+# Server Registry & Reachability API — Contract
+
+An internal admin API. Admins register servers (hostname, IP, type, port) and can
+press one button to test whether every registered server is reachable.
+
+This document is the spec. Build exactly what is here — see **Non-goals** before
+adding anything.
+
+---
+
+## 1. Tech stack
+
+| | |
+|---|---|
+| Language | Java 21 (virtual threads required) |
+| Framework | Spring Boot 3.3.x |
+| Database | PostgreSQL 15+ |
+| Build | Maven |
+
+Dependencies: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`,
+`spring-boot-starter-validation`, `postgresql`.
+
+No Flyway, no Liquibase, no security starter, no Lombok. Schema is created from
+`schema.sql` on startup.
+
+---
+
+## 2. Design principles
+
+1. **Keep it small.** Five endpoints, one table, ~8 classes. No service layer for
+   CRUD — the controller calls the repository directly.
+2. **Reachability is transient.** Check results are computed on demand and
+   returned. Nothing is persisted. There is no history table.
+3. **The IP is what we connect to.** `hostname` is a human-readable display
+   label only. It is never resolved, never used for the connection.
+4. **Records over classes** for all DTOs.
+
+---
+
+## 3. Database schema
+
+`src/main/resources/schema.sql`:
+
+```sql
+CREATE TABLE IF NOT EXISTS servers (
+    id          BIGSERIAL PRIMARY KEY,
+    hostname    VARCHAR(255) NOT NULL,
+    ip_address  VARCHAR(45)  NOT NULL,
+    server_type VARCHAR(30)  NOT NULL,
+    port        INT          NOT NULL DEFAULT 22,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_servers_ip_port UNIQUE (ip_address, port),
+    CONSTRAINT ck_servers_port CHECK (port BETWEEN 1 AND 65535)
+);
+```
+
+Notes:
+- `hostname` is a display label. **No unique constraint** — duplicates allowed.
+- `ip_address` is `VARCHAR(45)` to accommodate IPv6 string form.
+- `created_at` is set by the database. The application never writes it.
+- Entity must use `jakarta.persistence` annotations and map to this table
+  exactly. Set `spring.jpa.hibernate.ddl-auto=validate`.
+
+### server_type is free text
+
+Not an enum. Admins type whatever they want — `DB`, `WEB`, `MOBILE`, or
+something nobody anticipated. The entity field is a plain `String`.
+
+**Normalise before saving**: trim whitespace and uppercase the value. `db`,
+` DB `, and `Db` all persist as `DB`. This is the only transformation applied to
+any incoming field, and it exists to stop the column degrading into near-
+duplicates over time.
+
+Existing values are exposed through `GET /api/servers/types` (§4.5) so the form
+can suggest them without restricting input.
+
+---
+
+## 4. Endpoints
+
+Base path: `/api/servers`
+
+### 4.1 Create — `POST /api/servers`
+
+Request:
+
+```json
+{
+  "hostname": "prod-db-01",
+  "ipAddress": "10.0.1.15",
+  "serverType": "DB",
+  "port": 5432
+}
+```
+
+`port` is optional. When omitted or null, default to **22** in the application
+before saving (do not rely solely on the DB default).
+
+Response `201 Created`:
+
+```json
+{
+  "id": 1,
+  "hostname": "prod-db-01",
+  "ipAddress": "10.0.1.15",
+  "serverType": "DB",
+  "port": 5432,
+  "createdAt": "2026-07-28T09:12:03Z"
+}
+```
+
+Errors: `400` validation failure, `409` duplicate `(ipAddress, port)`.
+
+### 4.2 List — `GET /api/servers`
+
+No parameters. Returns a JSON array of the same object shape as 4.1, ordered by
+`createdAt` descending (newest first). Empty array when there are no rows.
+No pagination.
+
+Response: `200 OK`
+
+### 4.3 Delete — `DELETE /api/servers/{id}`
+
+Response: `204 No Content`. Returns `404` if the id does not exist.
+
+### 4.4 Check all — `POST /api/servers/check`
+
+No request body. Tests every registered server and returns the results.
+
+Response `200 OK`:
+
+```json
+[
+  {
+    "id": 1,
+    "hostname": "prod-db-01",
+    "ipAddress": "10.0.1.15",
+    "port": 5432,
+    "reachable": true,
+    "latencyMs": 12,
+    "error": null
+  },
+  {
+    "id": 2,
+    "hostname": "old-web",
+    "ipAddress": "10.0.2.9",
+    "port": 80,
+    "reachable": false,
+    "latencyMs": null,
+    "error": "connect timed out"
+  }
+]
+```
+
+Field rules:
+- `reachable: true` → `latencyMs` is set, `error` is null.
+- `reachable: false` → `latencyMs` is null, `error` holds the exception message.
+- Result order matches the order returned by `GET /api/servers`.
+- Empty registry returns `[]`.
+
+**This endpoint returns `200` even when every server is unreachable.** Servers
+being down is the answer, not an error condition. Only application or database
+failure produces a 5xx.
+
+### 4.5 Distinct types — `GET /api/servers/types`
+
+Returns every `server_type` value currently in use, so the admin form can offer
+them as suggestions (an HTML `<datalist>`) while still accepting new values.
+
+```json
+["APP", "DB", "MOBILE", "WEB"]
+```
+
+Backed by a single derived query on the repository:
+
+```java
+@Query("SELECT DISTINCT s.serverType FROM Server s ORDER BY s.serverType")
+List<String> findDistinctServerTypes();
+```
+
+Empty registry returns `[]`. Response: `200 OK`.
+
+---
+
+## 5. Validation
+
+Applied to the `POST` request record with Bean Validation:
+
+| Field | Rules |
+|---|---|
+| `hostname` | `@NotBlank`, `@Size(max = 255)` |
+| `ipAddress` | `@NotBlank`, `@Size(max = 45)`, `@Pattern` matching IPv4 or IPv6 |
+| `serverType` | `@NotBlank`, `@Size(max = 30)` — free text, uppercased on save |
+| `port` | nullable; when present `@Min(1) @Max(65535)` |
+
+The IP pattern must reject invalid octets such as `10.0.1.256`. A typo saved
+successfully would surface later as a permanently unreachable server, which is a
+confusing way to discover it.
+
+---
+
+## 6. Error response format
+
+All 4xx responses use one shape:
+
+```json
+{
+  "timestamp": "2026-07-28T09:12:03Z",
+  "status": 400,
+  "message": "Validation failed",
+  "errors": ["ipAddress: must be a valid IP address"]
+}
+```
+
+`errors` is omitted for non-validation failures.
+
+Handled in a single `@RestControllerAdvice`:
+
+| Exception | Status |
+|---|---|
+| `MethodArgumentNotValidException` | 400 |
+| `DataIntegrityViolationException` | 409 — message: "A server with this IP and port already exists" |
+| `NoSuchElementException` (or custom not-found) | 404 |
+
+---
+
+## 7. Health check algorithm
+
+`HealthCheckService.checkAll()` runs four steps **in this order**:
+
+1. **Load** all servers from the repository. The transaction opens and closes
+   here, and nowhere else.
+2. **Fan out** — submit one task per server to
+   `Executors.newVirtualThreadPerTaskExecutor()`. Each task opens a
+   `java.net.Socket` and calls
+   `connect(new InetSocketAddress(ipAddress, port), timeoutMs)`, measuring
+   elapsed time with `System.nanoTime()`.
+3. **Collect** — gather all results. Using the executor in try-with-resources
+   makes `close()` block until every task completes.
+4. **Return** the assembled list.
+
+There is no step 5. Nothing is written back to the database.
+
+Per-task rules:
+- Success → `reachable = true`, `latencyMs` = elapsed milliseconds.
+- Any `Exception` → `reachable = false`, `error` = the exception message, and the
+  task must still return a result. **A failing probe must never propagate an
+  exception out of the task** — one dead server cannot fail the whole request.
+- The socket must be closed in all paths (try-with-resources on the `Socket`).
+
+Because probes run concurrently, wall-clock time is roughly the configured
+timeout when anything is down, and near-instant when everything is up. It does
+not grow with the number of servers.
+
+---
+
+## 8. Project structure
+
+```
+src/main/java/com/example/serverregistry/
+├── ServerRegistryApplication.java
+├── Server.java                  entity
+├── ServerRepository.java        extends JpaRepository<Server, Long> + one @Query
+├── ServerRequest.java           record, validation annotations
+├── ServerResponse.java          record
+├── CheckResult.java             record
+├── ServerController.java        all five endpoints
+├── HealthCheckService.java      the only class with real logic
+└── GlobalExceptionHandler.java
+
+src/main/resources/
+├── application.yml
+└── schema.sql
+```
+
+`ServerController` calls `ServerRepository` directly for the three CRUD
+endpoints and delegates only `POST /check` to `HealthCheckService`. Do not
+create a `ServerService` — at this size it would only forward calls.
+
+---
+
+## 9. Configuration
+
+`application.yml`:
+
+```yaml
+spring:
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/serverregistry
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+  sql:
+    init:
+      mode: always
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    # Must stay false. Setting it true defers schema.sql until after Hibernate has
+    # initialised, so ddl-auto=validate runs against an empty database and startup
+    # fails with "missing table [servers]".
+    defer-datasource-initialization: false
+    # No lazy associations exist and responses are mapped to records before serialising,
+    # so a request-scoped session buys nothing. Off explicitly to silence the warning.
+    open-in-view: false
+
+healthcheck:
+  timeout-ms: 3000
+```
+
+`spring.threads.virtual.enabled: true` puts Tomcat request handling on virtual
+threads. That is separate from — and does not replace — the executor in
+`HealthCheckService`.
+
+Bind `healthcheck.timeout-ms` with `@ConfigurationProperties` or `@Value`.
+
+---
+
+## 10. Critical implementation constraints
+
+These are the things that break silently if got wrong.
+
+**1. `HealthCheckService.checkAll()` must not be `@Transactional`, and must not
+hold an open persistence session across the socket calls.** Load the list, let
+the transaction close, *then* probe. If probing happens inside a transaction,
+the connection pool (default 10) caps real concurrency at 10 no matter how many
+virtual threads are spawned. It fails as slowness rather than an error, so it
+will not be obvious.
+
+**2. Never resolve `hostname`.** `new InetSocketAddress(String, int)` performs a
+DNS lookup when given a name. It must always receive the literal `ip_address`.
+
+**3. Close every socket.** Use try-with-resources. Leaked descriptors under
+fan-out exhaust the process limit quickly.
+
+**4. Timeout alignment.** A 3000 ms probe timeout means the request can take ~4
+seconds. Any proxy, load balancer, or frontend fetch timeout in front of the app
+must comfortably exceed that, or a normal slow check returns a gateway timeout.
+
+---
+
+## 11. Build order
+
+Build and verify in this sequence:
+
+1. **Phase 1** — `schema.sql`, entity, repository, and the three CRUD endpoints
+   with validation and the exception handler. Verify with curl; no probing code
+   yet.
+2. **Phase 2** — probe a *single* server sequentially, exercised from a test.
+   Confirm timeout behaviour and error messages are what you expect. No
+   concurrency yet.
+3. **Phase 3** — wrap phase 2 in the virtual-thread executor and expose
+   `POST /api/servers/check`.
+
+Phase 2 before phase 3 matters: if concurrency and probe semantics are built
+together, every wrong result looks like a race condition.
+
+---
+
+## 12. Acceptance criteria
+
+- [ ] `POST /api/servers` without `port` saves the row with port `22`.
+- [ ] Posting the same `(ipAddress, port)` twice returns `409`, not `500`.
+- [ ] `ipAddress: "10.0.1.256"` returns `400` with a readable message.
+- [ ] `serverType: " db "` is stored and returned as `"DB"`.
+- [ ] `serverType: ""` returns `400`; any non-blank value up to 30 chars is accepted.
+- [ ] `GET /api/servers/types` returns each distinct value once, sorted.
+- [ ] `port: 0` and `port: 70000` both return `400`.
+- [ ] `DELETE` on a non-existent id returns `404`.
+- [ ] `POST /api/servers/check` with an empty registry returns `200` and `[]`.
+- [ ] A registry where every server is unreachable returns `200`, not `5xx`.
+- [ ] Checking N servers that all time out takes ≈ the timeout, not N × timeout.
+      Verify with 5+ unreachable entries; this proves the fan-out works.
+- [ ] A reachable server reports a non-null `latencyMs` and null `error`.
+
+### Suggested tests
+
+- `HealthCheckService` against a real `ServerSocket` bound to an ephemeral port
+  (`new ServerSocket(0)`) for the reachable case, and a closed port or
+  non-routable address such as `10.255.255.1` for the unreachable case.
+- `@WebMvcTest` on `ServerController` for validation and status codes.
+- The concurrency assertion from the acceptance list: total elapsed time for N
+  timing-out servers must be well under N × timeout.
+
+---
+
+## 13. Non-goals
+
+Do not build these. They were considered and deliberately excluded:
+
+- Check history / results table, and any endpoint that reads past results
+- Scheduled or background checks
+- Authentication, authorisation, rate limiting
+- ICMP ping, HTTP status checks, or protocol-specific handshakes — **TCP connect
+  only**
+- Update / `PUT` endpoint
+- Soft delete
+- Pagination, filtering, sorting parameters
+- Async job mode, polling, SSE, or WebSockets
+- Docker, CI configuration, or a frontend
+
+Each of these can be added later without changing what is specified here.
