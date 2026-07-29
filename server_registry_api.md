@@ -20,6 +20,10 @@ adding anything.
 Dependencies: `spring-boot-starter-web`, `spring-boot-starter-data-jpa`,
 `spring-boot-starter-validation`, `postgresql`.
 
+Test scope only: `spring-boot-testcontainers`, `testcontainers:postgresql`,
+`testcontainers:junit-jupiter`. These give the integration test (§12) a real
+database; nothing they provide reaches the running application.
+
 No Flyway, no Liquibase, no security starter, no Lombok. Schema is created from
 `schema.sql` on startup.
 
@@ -66,10 +70,15 @@ Notes:
 Not an enum. Admins type whatever they want — `DB`, `WEB`, `MOBILE`, or
 something nobody anticipated. The entity field is a plain `String`.
 
-**Normalise before saving**: trim whitespace and uppercase the value. `db`,
+**Normalise on the way in**: trim whitespace and uppercase the value. `db`,
 ` DB `, and `Db` all persist as `DB`. This is the only transformation applied to
 any incoming field, and it exists to stop the column degrading into near-
 duplicates over time.
+
+Do it in the compact constructor of the `ServerRequest` record, which runs
+during deserialisation and therefore *before* validation. A whitespace-only
+`serverType` collapses to `""` and is then rejected by `@NotBlank`, which is the
+behaviour §12 requires — normalising after validation would let `"   "` through.
 
 Existing values are exposed through `GET /api/servers/types` (§4.5) so the form
 can suggest them without restricting input.
@@ -109,6 +118,11 @@ Response `201 Created`:
 }
 ```
 
+`createdAt` is whatever precision the database column carries, serialised as
+ISO-8601. Postgres `TIMESTAMPTZ` gives microseconds, so expect
+`2026-07-29T03:21:33.388176Z` rather than the whole seconds shown above. Do not
+truncate it — clients must parse ISO-8601 properly rather than assume a width.
+
 Errors: `400` validation failure, `409` duplicate `(ipAddress, port)`.
 
 ### 4.2 List — `GET /api/servers`
@@ -116,6 +130,9 @@ Errors: `400` validation failure, `409` duplicate `(ipAddress, port)`.
 No parameters. Returns a JSON array of the same object shape as 4.1, ordered by
 `createdAt` descending (newest first). Empty array when there are no rows.
 No pagination.
+
+The ordering comes from `ServerRepository.NEWEST_FIRST`, the shared constant
+described in §8 — not from a sort declared here.
 
 Response: `200 OK`
 
@@ -155,7 +172,8 @@ Response `200 OK`:
 Field rules:
 - `reachable: true` → `latencyMs` is set, `error` is null.
 - `reachable: false` → `latencyMs` is null, `error` holds the exception message.
-- Result order matches the order returned by `GET /api/servers`.
+- Result order matches the order returned by `GET /api/servers`. Both load
+  through `ServerRepository.NEWEST_FIRST` (§8), so the two cannot drift apart.
 - Empty registry returns `[]`.
 
 **This endpoint returns `200` even when every server is unreachable.** Servers
@@ -212,15 +230,22 @@ All 4xx responses use one shape:
 }
 ```
 
-`errors` is omitted for non-validation failures.
+`errors` is omitted for non-validation failures, and sorted when present so the
+array is deterministic and can be asserted on directly.
 
 Handled in a single `@RestControllerAdvice`:
 
 | Exception | Status |
 |---|---|
-| `MethodArgumentNotValidException` | 400 |
+| `MethodArgumentNotValidException` | 400 — message: "Validation failed", with `errors` |
+| `HttpMessageNotReadableException` | 400 — message: "Malformed request body" |
 | `DataIntegrityViolationException` | 409 — message: "A server with this IP and port already exists" |
-| `NoSuchElementException` (or custom not-found) | 404 |
+| `NoSuchElementException` (or custom not-found) | 404 — message: "No server with id {id}" |
+
+`HttpMessageNotReadableException` is what Jackson raises for a body it cannot
+bind at all — `{"port": "abc"}`, or truncated JSON. It happens before validation
+runs, so without this handler those requests would return Spring's default error
+body and break the rule that *all* 4xx share one shape.
 
 ---
 
@@ -246,7 +271,15 @@ Per-task rules:
 - Any `Exception` → `reachable = false`, `error` = the exception message, and the
   task must still return a result. **A failing probe must never propagate an
   exception out of the task** — one dead server cannot fail the whole request.
+- Some socket exceptions carry a null or blank message. Fall back to the
+  exception's simple class name, so `error` is never null on an unreachable
+  server — `"error": null` next to `"reachable": false` tells an admin nothing.
 - The socket must be closed in all paths (try-with-resources on the `Socket`).
+
+Collecting the futures unwraps `ExecutionException`. Because `probe` handles its
+own failures a task cannot complete exceptionally, so if one somehow does, throw
+rather than reporting a server unreachable on false evidence — that is genuine
+application failure and the 5xx is correct.
 
 Because probes run concurrently, wall-clock time is roughly the configured
 timeout when anything is down, and near-instant when everything is up. It does
@@ -260,7 +293,7 @@ not grow with the number of servers.
 src/main/java/com/example/serverregistry/
 ├── ServerRegistryApplication.java
 ├── Server.java                  entity
-├── ServerRepository.java        extends JpaRepository<Server, Long> + one @Query
+├── ServerRepository.java        JpaRepository + one @Query + the shared Sort
 ├── ServerRequest.java           record, validation annotations
 ├── ServerResponse.java          record
 ├── CheckResult.java             record
@@ -276,6 +309,17 @@ src/main/resources/
 `ServerController` calls `ServerRepository` directly for the three CRUD
 endpoints and delegates only `POST /check` to `HealthCheckService`. Do not
 create a `ServerService` — at this size it would only forward calls.
+
+The registry ordering lives on the repository as a shared constant:
+
+```java
+Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "createdAt");
+```
+
+Both `GET /api/servers` and `HealthCheckService.checkAll()` load through it.
+§4.4 requires the check results to arrive in list order; two independently
+declared sorts would satisfy that on the day they were written and then silently
+diverge the first time one of them changed.
 
 ---
 
@@ -379,10 +423,49 @@ together, every wrong result looks like a race condition.
 
 - `HealthCheckService` against a real `ServerSocket` bound to an ephemeral port
   (`new ServerSocket(0)`) for the reachable case, and a closed port or
-  non-routable address such as `10.255.255.1` for the unreachable case.
-- `@WebMvcTest` on `ServerController` for validation and status codes.
+  non-routable address for the unreachable case.
+
+  Pick the unreachable address carefully. Some environments transparently proxy
+  outbound connections and will report *any* address as reachable, which turns
+  the timeout tests green for the wrong reason. Verify the chosen address
+  actually times out before trusting those tests. TEST-NET-3 (`203.0.113.0/24`,
+  RFC 5737) on an unusual port is a safer choice than `10.255.255.1`, and ports
+  80, 443 and 53 are the ones most likely to be intercepted.
+- `@WebMvcTest` on `ServerController` for validation and status codes. The slice
+  does not scan `@Service`, so `HealthCheckService` needs a `@MockBean` or the
+  controller cannot be constructed and every test in the class fails at once.
 - The concurrency assertion from the acceptance list: total elapsed time for N
   timing-out servers must be well under N × timeout.
+
+### Required: one integration test against a real database
+
+The two suggestions above mock `ServerRepository`, so several things are never
+executed at all and would fail in production while the suite stayed green:
+
+| Never exercised by mocks | How it fails |
+|---|---|
+| Entity fields vs. the real columns | Startup error, suite green |
+| `uq_servers_ip_port` | `500` instead of `409` |
+| `ck_servers_port` | Bad ports reach the table |
+| The `@Query` JPQL (§4.5) | Parsed only when JPA starts — never in a slice test |
+| `created_at` written by the DB default | Null timestamps in responses |
+
+So one `@SpringBootTest` class with `@Testcontainers`, a
+`PostgreSQLContainer<>("postgres:15")` — the production major version — and
+`@ServiceConnection` to wire it up. Cover the table above and the endpoint paths
+that depend on real rows; do **not** re-test validation or status codes there.
+The slice tests already cover those in milliseconds, and duplicating them
+against a container buys nothing but a slower build.
+
+If Docker is unavailable the class must **fail, not skip**. A test that silently
+stops running recreates exactly the blind spot it was written to remove.
+
+**Docker API version.** docker-java negotiates API 1.32 by default. Docker
+Engine 29.x declares `MinAPIVersion 1.40` and answers `/v1.32/info` with an
+empty HTTP 400, which Testcontainers reports as the badly misleading "Could not
+find a valid Docker environment" — the socket is fine and `docker ps` works.
+Surefire therefore sets `api.version=1.41`. It must be a **system property**;
+the `DOCKER_API_VERSION` environment variable is not read.
 
 ---
 
@@ -399,6 +482,9 @@ Do not build these. They were considered and deliberately excluded:
 - Soft delete
 - Pagination, filtering, sorting parameters
 - Async job mode, polling, SSE, or WebSockets
-- Docker, CI configuration, or a frontend
+- A `Dockerfile` or compose file for the application, CI configuration, or a
+  frontend. Docker as a **test dependency** is allowed and expected — see §12.
+  What is excluded is packaging and deploying the app, not how the test suite
+  obtains a database.
 
 Each of these can be added later without changing what is specified here.

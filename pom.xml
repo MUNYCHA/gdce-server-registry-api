@@ -19,6 +19,13 @@
 
     <properties>
         <java.version>21</java.version>
+        <!--
+            Ahead of the version Boot 3.3.5 manages (1.19.8). That one ships docker-java 3.3.6,
+            which talks Docker API 1.32 — below the MinAPIVersion of Engine 29.x, so every
+            container request comes back HTTP 400 and Testcontainers reports the far more
+            confusing "Could not find a valid Docker environment".
+        -->
+        <testcontainers.version>1.21.3</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -45,6 +52,25 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            Test scope only. Gives the integration test a real PostgreSQL to run against;
+            the application itself ships without Docker (see the contract, section 13).
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -52,6 +78,22 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!--
+                            Docker API version for Testcontainers' client. Without it docker-java
+                            negotiates 1.32, which Engine 29.x rejects (MinAPIVersion 1.40) with a
+                            400 that surfaces as "Could not find a valid Docker environment".
+                            1.41 is old enough to be universally supported and above the floor.
+                            Read as a property, not an env var — DOCKER_API_VERSION has no effect.
+                        -->
+                        <api.version>1.41</api.version>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>
