@@ -1,4 +1,4 @@
-package com.example.serverregistry;
+package com.gdce.serverregistry;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.dao.DataIntegrityViolationException;

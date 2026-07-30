@@ -1,4 +1,4 @@
-package com.example.serverregistry;
+package com.gdce.serverregistry;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

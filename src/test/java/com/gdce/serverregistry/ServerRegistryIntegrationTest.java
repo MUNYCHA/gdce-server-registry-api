@@ -1,4 +1,4 @@
-package com.example.serverregistry;
+package com.gdce.serverregistry;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

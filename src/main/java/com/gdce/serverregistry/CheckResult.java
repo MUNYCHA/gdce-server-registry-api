@@ -1,4 +1,4 @@
-package com.example.serverregistry;
+package com.gdce.serverregistry;
 
 /**
  * Outcome of one reachability probe. Never persisted — see design principle 2.

@@ -1,4 +1,4 @@
-package com.example.serverregistry;
+package com.gdce.serverregistry;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
