@@ -418,6 +418,10 @@ together, every wrong result looks like a race condition.
 - [ ] Checking N servers that all time out takes ≈ the timeout, not N × timeout.
       Verify with 5+ unreachable entries; this proves the fan-out works.
 - [ ] A reachable server reports a non-null `latencyMs` and null `error`.
+- [ ] An unreachable server gives up after the **configured** `healthcheck.timeout-ms`.
+      A hardcoded value that happens to match the configured one satisfies every
+      other item on this list, so this has to be checked against a value the test
+      overrides — see the timeout notes below.
 
 ### Suggested tests
 
@@ -430,7 +434,11 @@ together, every wrong result looks like a race condition.
   the timeout tests green for the wrong reason. Verify the chosen address
   actually times out before trusting those tests. TEST-NET-3 (`203.0.113.0/24`,
   RFC 5737) on an unusual port is a safer choice than `10.255.255.1`, and ports
-  80, 443 and 53 are the ones most likely to be intercepted.
+  80, 443 and 53 are the ones most likely to be intercepted. Measured on the
+  development machine: `203.0.113.5:9999` times out as intended, while the same
+  address on 80 and 443 **connects in under 50 ms**. Timing assertions must use a
+  black-holed address — a *refused* port returns instantly and proves nothing
+  about the timeout.
 - `@WebMvcTest` on `ServerController` for validation and status codes. The slice
   does not scan `@Service`, so `HealthCheckService` needs a `@MockBean` or the
   controller cannot be constructed and every test in the class fails at once.
@@ -459,6 +467,42 @@ against a container buys nothing but a slower build.
 
 If Docker is unavailable the class must **fail, not skip**. A test that silently
 stops running recreates exactly the blind spot it was written to remove.
+
+### Required: the timeout must come from configuration
+
+Two probe tests belong in that same class, not because they need the database but
+because they need the *wired* application. `HealthCheckServiceTest` constructs the
+service with `new HealthCheckService(repository, 300)`, so it never sees what
+Spring binds:
+
+| Bug | Caught by the hand-built tests? |
+|---|---|
+| `probe()` hardcodes a timeout, ignoring the field | Yes — its own value is ignored too |
+| The value Spring binds never reaches the socket | No — Spring is bypassed |
+| Fan-out serialises once a real connection pool exists | No — there is no pool |
+| `application.yml` key renamed, `@Value` falls back to a default | No |
+
+So: override `healthcheck.timeout-ms` on the test class to a value well below the
+3000 ms in `application.yml`, register a black-holed server, and assert the
+request's elapsed time tracks the override. A hardcoded 3000 then breaks the
+upper bound. The override also keeps the other probe tests in the class
+sub-second instead of costing a full production timeout each.
+
+**The override creates one blind spot, so close it.** `properties = ` contributes
+its own highest-precedence property source, which means the key resolves whether
+or not `application.yml` still defines it. Rename the key there and give the
+`@Value` a `:3000` fallback and the whole suite stays green while production
+silently ignores its configuration. Add one assertion that reads
+`healthcheck.timeout-ms` from the shipped property source itself, via
+`ConfigurableEnvironment`. Check the **name** only — the number is an operational
+choice that may be tuned, whereas the name is a contract between
+`application.yml` and the `@Value` that resolves it.
+
+**Size the concurrency test above the connection pool.** The constraint in §10.1
+is that a held session would cap real concurrency at the pool size, which is
+Hikari's default 10. Eight mocked servers cannot demonstrate that — there is no
+pool. Use `pool + 2` unreachable servers against the container so the cap would
+actually bind if it existed.
 
 **Docker API version.** docker-java negotiates API 1.32 by default. Docker
 Engine 29.x declares `MinAPIVersion 1.40` and answers `/v1.32/info` with an
