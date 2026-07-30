@@ -27,6 +27,12 @@ database; nothing they provide reaches the running application.
 No Flyway, no Liquibase, no security starter, no Lombok. Schema is created from
 `schema.sql` on startup.
 
+No `spring-boot-starter-actuator` either, which the dependency list above already
+implies but deployment makes tempting: a container healthcheck wants something to
+poll. It polls `GET /api/servers/types` instead — that exercises the web layer,
+JPA and a real database round trip, so it fails for the same reasons a readiness
+probe would, without widening the dependency list (§14).
+
 ---
 
 ## 2. Design principles
@@ -526,9 +532,61 @@ Do not build these. They were considered and deliberately excluded:
 - Soft delete
 - Pagination, filtering, sorting parameters
 - Async job mode, polling, SSE, or WebSockets
-- A `Dockerfile` or compose file for the application, CI configuration, or a
-  frontend. Docker as a **test dependency** is allowed and expected — see §12.
-  What is excluded is packaging and deploying the app, not how the test suite
-  obtains a database.
+- CI configuration, or a frontend.
+- ~~A `Dockerfile` or compose file for the application.~~ **Added — see §14.**
+  Packaging was originally excluded here; it is now in scope because the API has
+  to run on a production server. Nothing about §§1–12 changed to accommodate it:
+  no endpoint, no dependency and no schema was added, and the deployment reads
+  the same `application.yml` the development run does.
 
 Each of these can be added later without changing what is specified here.
+
+---
+
+## 14. Deployment
+
+Docker Compose is the production path; systemd running the jar directly is
+supported as an alternative. `deploy/README.md` is the operational guide — this
+section records only the decisions, so they are not re-litigated later.
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Multi-stage: Maven + JDK 21 builds, `21-jre` runs, unprivileged user |
+| `compose.yaml` | App plus `postgres:15`, private network, named volume |
+| `.env.example` | Template for the compose variables; `.env` is gitignored |
+| `deploy/server-registry.service` | systemd unit for the jar-on-a-VM path |
+| `deploy/server-registry.env.example` | Template for `/etc/server-registry.env` |
+
+**No configuration is compiled in.** Every operational value in
+`application.yml` is `${ENV_VAR:development-default}`. The defaults are what
+makes a local `mvn spring-boot:run` work with no setup; deployment overrides them
+and never edits the file.
+
+**Credentials keep their development defaults in `application.yml`.** Dropping
+the default to force an override was considered and rejected: an unresolvable
+placeholder fails at context startup, which breaks the local run and the §12
+integration test along with it. Enforcement sits one layer out, in the
+deployment, which knows it is production — `compose.yaml` uses `${DB_PASSWORD:?}`
+and will not start without it. The systemd path cannot fail this way and says so
+in its own template.
+
+**Tests do not run during the image build.** The §12 integration test starts a
+PostgreSQL container, and there is no daemon inside a build. `mvn test` is a
+precondition of deploying, not a stage of it.
+
+**The compose port binds to `127.0.0.1` by default.** With no authentication
+(§13) and a `POST /api/servers/check` that connects to any registered address, a
+publicly bound port is an unauthenticated port scanner pointed at the internal
+network. Widening `APP_BIND` is a decision that requires something else to be
+authenticating the caller first.
+
+**Egress is deliberately unrestricted.** The systemd unit is otherwise hardened
+(`ProtectSystem=strict`, `NoNewPrivileges`, read-only filesystem — the app writes
+nothing to disk) but sets no `IPAddressDeny`, because reaching arbitrary
+registered addresses is the product. Which targets are legitimate is a network
+question, so it is answered with firewall rules rather than in the unit file.
+
+**Single instance only.** `spring.sql.init.mode=always` plus `CREATE TABLE IF NOT
+EXISTS` is idempotent but not concurrency-safe. A second app container against
+the same database needs the DDL moved to Flyway and `mode=never` first — which is
+the moment the §1 "no Flyway" rule should be revisited, and not before.

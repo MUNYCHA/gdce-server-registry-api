@@ -1,0 +1,20 @@
+# The build stage compiles from source inside the image; a target/ copied in from the host
+# would be stale at best, and built by a different JDK at worst.
+target/
+
+.git/
+.gitignore
+.idea/
+*.iml
+
+# Never bake real credentials into an image layer.
+.env
+
+*.md
+deploy/
+compose.yaml
+Dockerfile
+.dockerignore
+
+# WSL artefacts from files copied out of Windows
+*:Zone.Identifier

@@ -1,0 +1,68 @@
+# Production deployment: the API plus its database on one host.
+#
+# Values come from a .env file beside this one — copy .env.example and fill it in. The
+# `:?` defaults below are error messages, not values: compose refuses to start if a
+# credential is missing, so a production stack cannot silently come up on postgres/postgres
+# the way the application's own development defaults would allow.
+#
+#   docker compose up -d --build
+#   docker compose logs -f app
+#
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${DB_NAME:-serverregistry}
+      POSTGRES_USER: ${DB_USER:?set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # The app's schema.sql is idempotent, but it still has to find a database that is
+    # accepting connections. Without this gate the app races Postgres' first-boot
+    # initialisation and dies before restart:unless-stopped can help it.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    # No ports: mapping. The database is reachable over the compose network by the app and
+    # from nowhere else; use `docker compose exec db psql` for administration.
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # `db` is the compose service name, resolved on the internal network.
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-serverregistry}
+      DB_USER: ${DB_USER:?set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      HEALTHCHECK_TIMEOUT_MS: ${HEALTHCHECK_TIMEOUT_MS:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Bound to loopback by default. The API has no authentication (§13) and POST
+    # /api/servers/check will TCP-connect to any address it is given, so exposing this
+    # port publicly hands an unauthenticated port scanner to the internet. Put a reverse
+    # proxy or VPN in front of it and only widen APP_BIND once something else is
+    # authenticating the caller.
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/servers/types"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Generous: a cold JVM plus schema.sql plus Hibernate's ddl-auto=validate. Failures
+      # during this window do not count against `retries`.
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          # The JVM reads this and sizes its heap to 75% of it (see Dockerfile).
+          memory: ${APP_MEMORY_LIMIT:-768m}
+
+volumes:
+  pgdata:

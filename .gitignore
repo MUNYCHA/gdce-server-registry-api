@@ -7,3 +7,6 @@ target/
 
 # WSL artefacts from files copied out of Windows
 *:Zone.Identifier
+
+# Local deployment secrets
+.env

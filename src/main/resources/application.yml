@@ -1,9 +1,24 @@
+#
+# Every operational value here is an environment variable with a development default.
+# The defaults are what makes `mvn spring-boot:run` work against a local Postgres with
+# no setup; deployment overrides them and never edits this file. Nothing that differs
+# between a laptop and a production server is a literal below.
+#
+# The credential defaults are deliberately *not* removed to force an override. An
+# unresolvable placeholder fails at context startup, which would break both local runs
+# and the integration test. Enforcement belongs one layer out, where the deployment
+# knows it is production: compose.yaml and the systemd env file both refuse to start
+# without DB_PASSWORD set explicitly.
+#
+server:
+  port: ${SERVER_PORT:8080}
+
 spring:
   threads:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5432/serverregistry
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/serverregistry}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
   sql:
@@ -19,5 +34,9 @@ spring:
     # request-scoped session buys nothing. Off explicitly, rather than left to the default.
     open-in-view: false
 
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+
 healthcheck:
-  timeout-ms: 3000
+  timeout-ms: ${HEALTHCHECK_TIMEOUT_MS:3000}

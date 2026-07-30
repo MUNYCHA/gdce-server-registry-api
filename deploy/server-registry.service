@@ -1,0 +1,57 @@
+#
+# Alternative to Docker: run the jar directly under systemd.
+#
+#   sudo cp deploy/server-registry.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now server-registry
+#
+# See deploy/README.md for the full sequence. All configuration comes from the environment
+# file; nothing below needs editing except ExecStart if java lives elsewhere.
+#
+[Unit]
+Description=Server Registry API
+Documentation=file:/opt/server-registry/server_registry_api.md
+# network-online rather than network: the application opens a connection pool to PostgreSQL
+# during startup and fails if routing is not up yet.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=serverregistry
+Group=serverregistry
+
+# Credentials live here, not in this unit — unit files are world-readable, this is 0600.
+EnvironmentFile=/etc/server-registry.env
+
+WorkingDirectory=/opt/server-registry
+# MaxRAMPercentage needs a limit to take a percentage of, and MemoryMax below supplies one.
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75 -jar /opt/server-registry/app.jar
+
+# Spring Boot shuts down cleanly on SIGTERM and exits 143. Without this, every ordinary
+# `systemctl stop` is recorded as a failure and Restart=on-failure fights the operator.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5s
+
+MemoryMax=768M
+
+# Hardening. The application writes nothing to disk: no local logs (journald captures
+# stdout), no uploads, and the schema is created inside PostgreSQL. So it needs no writable
+# path at all, and every one of these can be absolute.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+# Not RestrictAddressFamilies or IPAddressDeny: POST /api/servers/check exists to TCP-connect
+# to arbitrary registered addresses, so egress restrictions here would break the feature.
+# Limit what it can reach with firewall rules chosen for your network instead.
+
+[Install]
+WantedBy=multi-user.target
