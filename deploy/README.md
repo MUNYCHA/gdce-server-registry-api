@@ -54,10 +54,25 @@ up on the application's `postgres`/`postgres` development defaults by accident.
 | Logs | `docker compose logs -f app` |
 | Stop, keep data | `docker compose down` |
 | Stop, **delete the database** | `docker compose down -v` |
-| psql shell | `docker compose exec db psql -U "$DB_USER" -d serverregistry` |
+| psql shell | `docker compose exec db psql -U "$DB_USER" -d "$DB_NAME"` |
 
 The database has no published port — it is reachable from the app container and nowhere
 else. Its data lives in the `pgdata` volume and survives `down` and rebuilds.
+
+### Resource limits
+
+Both services are capped, so neither can take the host down with it. Defaults are one core
+and 768 MB for the app, one core and 512 MB for the database; all four are `.env` variables.
+Raising `APP_MEMORY_LIMIT` also raises the JVM heap, which is sized at 75% of the container
+limit rather than by a fixed `-Xmx` — there is no second number to keep in step with it.
+
+```bash
+docker stats --no-stream          # actual usage against the limits
+```
+
+A container killed for exceeding its memory limit exits `137`. If that happens to `app`,
+raise `APP_MEMORY_LIMIT`; the idle floor is around 300 MB and almost all of it is JVM
+baseline rather than anything that grows with the size of the registry.
 
 ### Backups
 
@@ -124,6 +139,21 @@ start — the application quietly falls back to `localhost` and `postgres`/`post
 
 To deploy a new version: replace `app.jar` and `systemctl restart server-registry`.
 
+### Resource limits
+
+The unit sets `MemoryMax=768M` and `CPUQuota=100%` (one core), matching the compose defaults.
+These are cgroup limits enforced by systemd, so unlike the compose path they are edited in
+the unit file rather than in the environment file:
+
+```bash
+sudo systemctl edit server-registry     # override MemoryMax / CPUQuota
+systemctl show server-registry -p MemoryMax -p CPUQuota
+```
+
+`MemoryMax` is not optional decoration — `ExecStart` passes `-XX:MaxRAMPercentage=75`, which
+needs a limit to take a percentage of. Remove `MemoryMax` and the JVM falls back to sizing
+its heap against total host RAM.
+
 ---
 
 ## Environment variables
@@ -139,6 +169,9 @@ To deploy a new version: replace `app.jar` and `systemctl restart server-registr
 | `APP_PORT` | `8080` | Compose only — host port. |
 | `HEALTHCHECK_TIMEOUT_MS` | `3000` | Per-server TCP connect timeout for `POST /api/servers/check`. |
 | `APP_MEMORY_LIMIT` | `768m` | Compose only — container limit; JVM heap follows at 75%. |
+| `APP_CPU_LIMIT` | `1.0` | Compose only — cores for the app. `1.0` is one core. |
+| `DB_MEMORY_LIMIT` | `512m` | Compose only — container limit for PostgreSQL. |
+| `DB_CPU_LIMIT` | `1.0` | Compose only — cores for PostgreSQL. |
 | `LOG_LEVEL` | `INFO` | Root logger level. |
 
 `SPRING_*` variables work too, via Spring's relaxed binding — `SPRING_DATASOURCE_URL`

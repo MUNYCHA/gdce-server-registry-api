@@ -78,6 +78,11 @@ services:
           # to start, not slower to finish.
           cpus: ${APP_CPU_LIMIT:-1.0}
           # The JVM reads this and sizes its heap to 75% of it (see Dockerfile).
+          #
+          # Your editor will underline this line. The Compose schema requires `memory` to
+          # match ^[0-9]+(b|k|m|g|kb|mb|gb)?$ and does not know about interpolation, but
+          # Docker substitutes the variable before validating and `docker compose config`
+          # passes. Do not "fix" it by hardcoding the value.
           memory: ${APP_MEMORY_LIMIT:-768m}
         # Idle sits near 300 MB, nearly all of it JVM baseline rather than anything that
         # scales with the registry. The reservation covers that floor so the container is
