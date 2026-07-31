@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "Server Registry & Reachability API",
+    "description": "Admin API for registering servers and testing reachability.\n\nSet `baseUrl` to wherever the app is running (compose binds to 127.0.0.1:8080 by default).\n\n`Create` stores the new id in the `serverId` collection variable, so `Delete` works straight after it without editing the URL.\n\nContract: server_registry_api.md in the repository root.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "serverId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create server",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Capture the id so Delete can run against a row that exists.",
+              "if (pm.response.code === 201) {",
+              "    pm.collectionVariables.set('serverId', pm.response.json().id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hostname\": \"prod-db-01\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "201 on success. `port` is optional and defaults to 22. 400 on validation failure, 409 when (ipAddress, port) is already registered."
+      }
+    },
+    {
+      "name": "Create server (no port, defaults to 22)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hostname\": \"bastion\",\n  \"ipAddress\": \"10.0.9.4\",\n  \"serverType\": \" ssh \"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "`serverType` is trimmed and uppercased on the way in, so this saves as \"SSH\". Omitted `port` saves as 22."
+      }
+    },
+    {
+      "name": "List servers",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers"]
+        },
+        "description": "200 with every registered server, newest first. No parameters, no pagination. Empty array when there are no rows."
+      }
+    },
+    {
+      "name": "Distinct server types",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers/types",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers", "types"]
+        },
+        "description": "200 with each server_type value in use, sorted. Doubles as the container healthcheck endpoint — it exercises the web layer, JPA and a real database round trip."
+      }
+    },
+    {
+      "name": "Check all servers",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers/check",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers", "check"]
+        },
+        "description": "No request body. TCP-connects to every registered server concurrently and returns the results in list order.\n\nAlways 200 when the probing ran, including when every server is unreachable — servers being down is the answer, not an error.\n\nTakes roughly `healthcheck.timeout-ms` (3000 by default) when anything is down, regardless of how many servers are registered. Raise Postman's request timeout above that if you have changed it from the default of no limit."
+      }
+    },
+    {
+      "name": "Delete server",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers/{{serverId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers", "{{serverId}}"]
+        },
+        "description": "204 on success, 404 if the id does not exist. `serverId` is set by the Create request."
+      }
+    },
+    {
+      "name": "Error cases",
+      "description": "All 4xx responses share one shape: timestamp, status, message, and — for validation failures only — a sorted `errors` array.",
+      "item": [
+        {
+          "name": "400 — invalid IP address",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"typo-box\",\n  \"ipAddress\": \"10.0.1.256\",\n  \"serverType\": \"WEB\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "400 \"Validation failed\". A bad octet has to be caught here — saved successfully it would surface later as a permanently unreachable server."
+          }
+        },
+        {
+          "name": "400 — port out of range",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"bad-port\",\n  \"ipAddress\": \"10.0.1.20\",\n  \"serverType\": \"WEB\",\n  \"port\": 70000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "400. Port must be between 1 and 65535."
+          }
+        },
+        {
+          "name": "400 — malformed body",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"unbindable\",\n  \"ipAddress\": \"10.0.1.21\",\n  \"serverType\": \"WEB\",\n  \"port\": \"abc\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "400 \"Malformed request body\". Jackson cannot bind this, which happens before validation runs — hence a different message and no `errors` array."
+          }
+        },
+        {
+          "name": "409 — duplicate IP and port",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"prod-db-01-again\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "409 once the first Create request has run. Same (ipAddress, port), different hostname — hostname is a display label and carries no uniqueness."
+          }
+        },
+        {
+          "name": "404 — delete unknown id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers", "999999"]
+            },
+            "description": "404 \"No server with id 999999\"."
+          }
+        }
+      ]
+    }
+  ]
+}
