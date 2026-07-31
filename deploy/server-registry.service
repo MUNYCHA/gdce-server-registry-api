@@ -34,6 +34,9 @@ Restart=on-failure
 RestartSec=5s
 
 MemoryMax=768M
+# 100% is one core. The probes are socket-bound rather than CPU-bound, so this caps the
+# damage a large fan-out can do to everything else on the host without slowing it much.
+CPUQuota=100%
 
 # Hardening. The application writes nothing to disk: no local logs (journald captures
 # stdout), no uploads, and the schema is created inside PostgreSQL. So it needs no writable

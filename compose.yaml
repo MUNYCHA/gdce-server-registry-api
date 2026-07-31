@@ -29,6 +29,17 @@ services:
     restart: unless-stopped
     # No ports: mapping. The database is reachable over the compose network by the app and
     # from nowhere else; use `docker compose exec db psql` for administration.
+    deploy:
+      resources:
+        limits:
+          cpus: ${DB_CPU_LIMIT:-1.0}
+          memory: ${DB_MEMORY_LIMIT:-512m}
+        # One table and no concurrent writers of any size, so the reservation only has to
+        # cover shared_buffers plus a handful of backends. Its job is to stop a busy app
+        # container from starving the database it depends on, not to size it for load.
+        reservations:
+          cpus: "0.25"
+          memory: 128m
 
   app:
     build: .
@@ -61,8 +72,19 @@ services:
     deploy:
       resources:
         limits:
+          # A CPU cap costs this workload little: POST /api/servers/check spawns a virtual
+          # thread per registered server, but they spend the whole probe blocked on a socket
+          # rather than computing. Capping at one core makes a large fan-out slightly slower
+          # to start, not slower to finish.
+          cpus: ${APP_CPU_LIMIT:-1.0}
           # The JVM reads this and sizes its heap to 75% of it (see Dockerfile).
           memory: ${APP_MEMORY_LIMIT:-768m}
+        # Idle sits near 300 MB, nearly all of it JVM baseline rather than anything that
+        # scales with the registry. The reservation covers that floor so the container is
+        # not scheduled somewhere it cannot actually start.
+        reservations:
+          cpus: "0.25"
+          memory: 320m
 
 volumes:
   pgdata:
