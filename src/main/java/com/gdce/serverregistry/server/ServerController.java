@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -48,6 +49,17 @@ public class ServerController {
     @GetMapping("/types")
     public List<String> types() {
         return repository.findDistinctServerTypes();
+    }
+
+    @PutMapping("/{id}")
+    public ServerResponse update(@PathVariable Long id, @Valid @RequestBody ServerRequest request) {
+        Server server = repository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("No server with id " + id));
+        server.setHostname(request.hostname());
+        server.setIpAddress(request.ipAddress());
+        server.setServerType(request.serverType());
+        server.setPort(request.port() == null ? DEFAULT_PORT : request.port());
+        return ServerResponse.from(repository.save(server));
     }
 
     @DeleteMapping("/{id}")

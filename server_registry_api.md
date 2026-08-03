@@ -86,7 +86,7 @@ during deserialisation and therefore *before* validation. A whitespace-only
 `serverType` collapses to `""` and is then rejected by `@NotBlank`, which is the
 behaviour §12 requires — normalising after validation would let `"   "` through.
 
-Existing values are exposed through `GET /api/servers/types` (§4.5) so the form
+Existing values are exposed through `GET /api/servers/types` (§4.6) so the form
 can suggest them without restricting input.
 
 ---
@@ -142,11 +142,22 @@ described in §8 — not from a sort declared here.
 
 Response: `200 OK`
 
-### 4.3 Delete — `DELETE /api/servers/{id}`
+### 4.3 Update — `PUT /api/servers/{id}`
+
+Request body: same shape as 4.1, and the same validation and `port` default
+apply. Every field is replaced — this is a full update, not a partial patch.
+
+Response `200 OK`: same object shape as 4.1, with `id` and `createdAt`
+unchanged.
+
+Errors: `400` validation failure, `404` if the id does not exist, `409`
+duplicate `(ipAddress, port)` (checked against every *other* row).
+
+### 4.4 Delete — `DELETE /api/servers/{id}`
 
 Response: `204 No Content`. Returns `404` if the id does not exist.
 
-### 4.4 Check all — `POST /api/servers/check`
+### 4.5 Check all — `POST /api/servers/check`
 
 No request body. Tests every registered server and returns the results.
 
@@ -186,7 +197,7 @@ Field rules:
 being down is the answer, not an error condition. Only application or database
 failure produces a 5xx.
 
-### 4.5 Distinct types — `GET /api/servers/types`
+### 4.6 Distinct types — `GET /api/servers/types`
 
 Returns every `server_type` value currently in use, so the admin form can offer
 them as suggestions (an HTML `<datalist>`) while still accepting new values.
@@ -304,7 +315,7 @@ src/main/java/com/gdce/serverregistry/
 │   ├── ServerRepository.java       JpaRepository + one @Query + the shared Sort
 │   ├── ServerRequest.java          record, validation annotations
 │   ├── ServerResponse.java         record
-│   └── ServerController.java       create / list / delete / types
+│   └── ServerController.java       create / list / update / delete / types
 └── reachability/                  one capability, one folder
     ├── HealthCheckService.java     the only class with real logic
     ├── CheckResult.java            record
@@ -320,7 +331,7 @@ controller, its service (if it has one) and its own result type together, so
 a future capability (e.g. something beyond reachability) adds one sibling
 folder rather than touching four existing ones.
 
-`ServerController` calls `ServerRepository` directly for its four endpoints.
+`ServerController` calls `ServerRepository` directly for its five endpoints.
 `ReachabilityController` delegates its one endpoint to `HealthCheckService`.
 Do not create a `ServerService` — at this size it would only forward calls.
 
@@ -437,6 +448,9 @@ together, every wrong result looks like a race condition.
 - [ ] `serverType: ""` returns `400`; any non-blank value up to 30 chars is accepted.
 - [ ] `GET /api/servers/types` returns each distinct value once, sorted.
 - [ ] `port: 0` and `port: 70000` both return `400`.
+- [ ] `PUT /api/servers/{id}` on a non-existent id returns `404`.
+- [ ] `PUT /api/servers/{id}` to an `(ipAddress, port)` already used by a
+      different row returns `409`.
 - [ ] `DELETE` on a non-existent id returns `404`.
 - [ ] `POST /api/servers/check` with an empty registry returns `200` and `[]`.
 - [ ] A registry where every server is unreachable returns `200`, not `5xx`.
@@ -480,7 +494,7 @@ executed at all and would fail in production while the suite stayed green:
 | Entity fields vs. the real columns | Startup error, suite green |
 | `uq_servers_ip_port` | `500` instead of `409` |
 | `ck_servers_port` | Bad ports reach the table |
-| The `@Query` JPQL (§4.5) | Parsed only when JPA starts — never in a slice test |
+| The `@Query` JPQL (§4.6) | Parsed only when JPA starts — never in a slice test |
 | `created_at` written by the DB default | Null timestamps in responses |
 
 So one `@SpringBootTest` class with `@Testcontainers`, a
@@ -547,7 +561,6 @@ Do not build these. They were considered and deliberately excluded:
 - Authentication, authorisation, rate limiting
 - ICMP ping, HTTP status checks, or protocol-specific handshakes — **TCP connect
   only**
-- Update / `PUT` endpoint
 - Soft delete
 - Pagination, filtering, sorting parameters
 - Async job mode, polling, SSE, or WebSockets

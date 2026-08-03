@@ -14,6 +14,11 @@
       "key": "serverId",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "updateTargetId",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
@@ -78,6 +83,24 @@
           "path": ["api", "servers"]
         },
         "description": "200 with every registered server, newest first. No parameters, no pagination. Empty array when there are no rows."
+      }
+    },
+    {
+      "name": "Update server",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers/{{serverId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers", "{{serverId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hostname\": \"prod-db-01-renamed\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5433\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "200 with the updated row. Full replace, not a patch — every field is required, same validation as Create. `serverId` is set by the Create request. 404 if the id does not exist, 409 if (ipAddress, port) collides with a different row."
       }
     },
     {
@@ -211,6 +234,74 @@
               "options": { "raw": { "language": "json" } }
             },
             "description": "409, using the row the seed request just created. Same (ipAddress, port), different hostname — hostname is a display label and carries no uniqueness."
+          }
+        },
+        {
+          "name": "409 — update seed (row this update-conflict test targets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Capture the id so the update-conflict test below has a row to PUT to.",
+                  "if (pm.response.code === 201) {",
+                  "    pm.collectionVariables.set('updateTargetId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.97\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "A row distinct from 'dup-seed' above, so it can be updated into a collision without touching that row."
+          }
+        },
+        {
+          "name": "409 — update to duplicate IP and port",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers/{{updateTargetId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers", "{{updateTargetId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "409 — 'dup-seed' above already owns (10.0.1.99, 5432)."
+          }
+        },
+        {
+          "name": "404 — update unknown id",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers", "999999"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"ghost\",\n  \"ipAddress\": \"10.0.1.30\",\n  \"serverType\": \"DB\",\n  \"port\": 22\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "404 \"No server with id 999999\"."
           }
         },
         {

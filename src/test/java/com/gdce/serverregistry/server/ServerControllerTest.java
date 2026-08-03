@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -259,6 +261,88 @@ class ServerControllerTest {
         mockMvc.perform(get("/api/servers/types"))
                 .andExpect(status().isOk())
                 .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void updateExistingAppliesAllFields() throws Exception {
+        Server existing = persisted(new Server("old-host", "10.0.1.15", "WEB", 80), 1L);
+        given(repository.findById(1L)).willReturn(Optional.of(existing));
+        given(repository.save(any(Server.class))).willAnswer(call -> call.getArgument(0));
+
+        mockMvc.perform(put("/api/servers/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"new-host","ipAddress":"10.0.2.9","serverType":"DB","port":5432}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.hostname").value("new-host"))
+                .andExpect(jsonPath("$.ipAddress").value("10.0.2.9"))
+                .andExpect(jsonPath("$.serverType").value("DB"))
+                .andExpect(jsonPath("$.port").value(5432));
+
+        verify(repository).save(existing);
+    }
+
+    @Test
+    void updateWithoutPortDefaultsTo22() throws Exception {
+        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", 80), 1L);
+        given(repository.findById(1L)).willReturn(Optional.of(existing));
+        given(repository.save(any(Server.class))).willAnswer(call -> call.getArgument(0));
+
+        mockMvc.perform(put("/api/servers/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.port").value(22));
+    }
+
+    @Test
+    void updateMissingReturns404() throws Exception {
+        given(repository.findById(999L)).willReturn(Optional.empty());
+
+        mockMvc.perform(put("/api/servers/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("No server with id 999"));
+
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void updateToDuplicateIpAndPortReturns409() throws Exception {
+        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", 80), 1L);
+        given(repository.findById(1L)).willReturn(Optional.of(existing));
+        given(repository.save(any(Server.class)))
+                .willThrow(new DataIntegrityViolationException("uq_servers_ip_port"));
+
+        mockMvc.perform(put("/api/servers/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.2.9","serverType":"DB","port":5432}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value("A server with this IP and port already exists"));
+    }
+
+    @Test
+    void updateWithInvalidOctetReturns400() throws Exception {
+        mockMvc.perform(put("/api/servers/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.1.256","serverType":"DB"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]").value("ipAddress: must be a valid IP address"));
+
+        verify(repository, never()).findById(any());
     }
 
     @Test

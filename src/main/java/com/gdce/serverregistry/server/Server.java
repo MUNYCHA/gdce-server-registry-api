@@ -71,4 +71,20 @@ public class Server {
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
+
+    public void setHostname(String hostname) {
+        this.hostname = hostname;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
+    public void setServerType(String serverType) {
+        this.serverType = serverType;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
 }
