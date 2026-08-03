@@ -19,13 +19,6 @@ curl -fsS localhost:8080/api/servers      # []
 
 No configuration required — `application.yml` carries development defaults for everything.
 
-Or bring your own database with Docker and skip the setup:
-
-```bash
-cp .env.example .env      # fill in DB_PASSWORD
-docker compose up -d --build
-```
-
 ## Run the tests
 
 ```bash
@@ -105,9 +98,6 @@ docker compose -f compose.prod.yaml up -d --build
 curl -fsS localhost:8080/api/servers      # []
 ```
 
-`compose.yaml` (bundled PostgreSQL, used above under "Run it locally") is a local-dev
-convenience only — not the deploy path once someone else owns the database.
-
 Nothing operational is compiled in. Every value in `application.yml` is
 `${ENV_VAR:development-default}`, so a deployment overrides the environment and never edits
 the file.
@@ -126,7 +116,7 @@ the file.
 src/main/java/com/gdce/serverregistry/   9 classes, one flat package
 src/main/resources/application.yml       all config, env-driven
 src/main/resources/schema.sql            CREATE TABLE IF NOT EXISTS, run at startup
-compose.yaml  Dockerfile  .env.example   local dev — bundled PostgreSQL
+Dockerfile  .env.example                 builds and configures the container
 compose.prod.yaml                        deploy — connects to a database you provide
 deploy/server-registry.service           systemd alternative to Docker
 DEPLOY.md                                the deployment guide

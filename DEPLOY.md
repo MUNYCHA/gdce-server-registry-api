@@ -53,10 +53,8 @@ widening it.
 | `password authentication failed` | `DB_USER` / `DB_PASSWORD` wrong |
 | `missing table [servers]` | `DB_USER` lacks `CREATE` |
 
-## Other ways to run it (not the default — see below)
+## Other ways to run it
 
-- **`compose.yaml`** — bundles its own PostgreSQL. Useful for local development when you
-  don't have a database handy. Not for the "admin owns the database" handoff above.
 - **systemd** — runs the jar directly, no Docker. See `deploy/server-registry.service`.
   Same three env vars, but set in `/etc/server-registry.env`, and `DB_URL` should point at
   `localhost` rather than `host.docker.internal` since there's no container in the way.

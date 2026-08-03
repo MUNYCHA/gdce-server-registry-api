@@ -552,9 +552,8 @@ section records only the decisions, so they are not re-litigated later.
 | File | Purpose |
 |---|---|
 | `Dockerfile` | Multi-stage: Maven + JDK 21 builds, `21-jre` runs, unprivileged user |
-| `compose.yaml` | App plus `postgres:15`, private network, named volume |
-| `compose.prod.yaml` | App only, against a PostgreSQL already running on the host |
-| `.env.example` | Template for all three paths — also installed as `/etc/server-registry.env`; `.env` is gitignored |
+| `compose.prod.yaml` | App only, against a database the operator already runs — no `db` service, nothing here creates one |
+| `.env.example` | Template for both paths — also installed as `/etc/server-registry.env`; `.env` is gitignored |
 | `deploy/server-registry.service` | systemd unit for the jar-on-a-VM path |
 
 **No configuration is compiled in.** Every operational value in
@@ -566,9 +565,9 @@ and never edits the file.
 the default to force an override was considered and rejected: an unresolvable
 placeholder fails at context startup, which breaks the local run and the §12
 integration test along with it. Enforcement sits one layer out, in the
-deployment, which knows it is production — `compose.yaml` uses `${DB_PASSWORD:?}`
-and will not start without it. The systemd path cannot fail this way and says so
-in its own template.
+deployment, which knows it is production — `compose.prod.yaml` uses
+`${DB_URL:?}`/`${DB_USER:?}`/`${DB_PASSWORD:?}` and will not start without them.
+The systemd path cannot fail this way and says so in its own template.
 
 **Tests do not run during the image build.** The §12 integration test starts a
 PostgreSQL container, and there is no daemon inside a build. `mvn test` is a

@@ -12,7 +12,7 @@ target/
 
 *.md
 deploy/
-compose.yaml
+compose.prod.yaml
 Dockerfile
 .dockerignore
 

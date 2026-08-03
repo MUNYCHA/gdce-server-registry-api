@@ -1,6 +1,5 @@
 # Production: the API only. PostgreSQL runs on the host as its own service.
 #
-# Use compose.yaml instead for local development — that one brings its own database.
 # This file deliberately has no `db` service, so nothing here creates or migrates a
 # database; it expects one to already exist and be reachable.
 #
