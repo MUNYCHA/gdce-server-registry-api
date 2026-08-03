@@ -626,6 +626,10 @@ Do not build these. They were considered and deliberately excluded:
 - ICMP ping, HTTP status checks, or protocol-specific handshakes — **TCP connect
   only**
 - Soft delete
+- Optimistic locking on `PUT` — no version field, no `ETag`/`If-Match`. Two
+  admins editing the same row concurrently get last-write-wins, silently. For
+  a hand-run internal registry with a handful of admins that's the right
+  trade, not an oversight to fix later.
 - Pagination, filtering, sorting parameters
 - Async job mode, polling, SSE, or WebSockets
 - CI configuration, or a frontend.
