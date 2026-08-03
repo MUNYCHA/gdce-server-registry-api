@@ -4,7 +4,7 @@
 #   sudo cp deploy/server-registry.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now server-registry
 #
-# See deploy/README.md for the full sequence. All configuration comes from the environment
+# See DEPLOY.md for the full sequence. All configuration comes from the environment
 # file; nothing below needs editing except ExecStart if java lives elsewhere.
 #
 [Unit]

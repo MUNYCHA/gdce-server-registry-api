@@ -546,7 +546,7 @@ Each of these can be added later without changing what is specified here.
 ## 14. Deployment
 
 Docker Compose is the production path; systemd running the jar directly is
-supported as an alternative. `deploy/README.md` is the operational guide — this
+supported as an alternative. `DEPLOY.md` is the operational guide — this
 section records only the decisions, so they are not re-litigated later.
 
 | File | Purpose |

@@ -96,13 +96,17 @@ reachable. Results are never stored — the registry holds servers, not a histor
 
 ## Deploying
 
-`deploy/README.md` is the operational guide. Three supported paths, reading identical
-environment variables:
+The API ships as a container that connects to a database you already have — it doesn't set
+one up or manage it. `DEPLOY.md` is the full guide; short version:
 
-- **`compose.prod.yaml`** — the API in a container, against a PostgreSQL already running on
-  the host. The production path.
-- **`compose.yaml`** — brings its own PostgreSQL, needs nothing on the host but Docker.
-- **systemd** — runs the jar directly against a database you provide.
+```bash
+cp .env.example .env      # fill in DB_URL, DB_USER, DB_PASSWORD for your database
+docker compose -f compose.prod.yaml up -d --build
+curl -fsS localhost:8080/api/servers      # []
+```
+
+`compose.yaml` (bundled PostgreSQL, used above under "Run it locally") is a local-dev
+convenience only — not the deploy path once someone else owns the database.
 
 Nothing operational is compiled in. Every value in `application.yml` is
 `${ENV_VAR:development-default}`, so a deployment overrides the environment and never edits
@@ -111,7 +115,7 @@ the file.
 > **Do not expose the port publicly.** There is no authentication, and
 > `POST /api/servers/check` will TCP-connect to any address in the registry. Published on a
 > public interface that is an unauthenticated port scanner pointed at your internal network.
-> Both deployment paths bind to `127.0.0.1` by default; put a reverse proxy or VPN in front
+> `compose.prod.yaml` binds to `127.0.0.1` by default; put a reverse proxy or VPN in front
 > before widening it.
 
 ---
@@ -122,9 +126,10 @@ the file.
 src/main/java/com/gdce/serverregistry/   9 classes, one flat package
 src/main/resources/application.yml       all config, env-driven
 src/main/resources/schema.sql            CREATE TABLE IF NOT EXISTS, run at startup
-compose.yaml  Dockerfile  .env.example   the Docker path, bundled PostgreSQL
-compose.prod.yaml                        the Docker path, PostgreSQL on the host
-deploy/                                  the systemd path, plus the deployment guide
+compose.yaml  Dockerfile  .env.example   local dev — bundled PostgreSQL
+compose.prod.yaml                        deploy — connects to a database you provide
+deploy/server-registry.service           systemd alternative to Docker
+DEPLOY.md                                the deployment guide
 server_registry_api.md                   the contract
 ```
 
