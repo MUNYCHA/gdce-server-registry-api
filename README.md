@@ -39,6 +39,7 @@ Base path `/api/servers`. No authentication — see the warning below.
 |---|---|---|
 | `POST` | `/api/servers` | Register a server → `201` |
 | `GET` | `/api/servers` | List all, newest first → `200` |
+| `PUT` | `/api/servers/{id}` | Replace a server's fields → `200` |
 | `POST` | `/api/servers/check` | Probe every registered server → `200` |
 | `GET` | `/api/servers/types` | Distinct server types in use → `200` |
 | `DELETE` | `/api/servers/{id}` | Remove one → `204` |
