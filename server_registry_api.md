@@ -37,7 +37,7 @@ probe would, without widening the dependency list (§14).
 
 ## 2. Design principles
 
-1. **Keep it small.** Five endpoints, one table, ~8 classes. No service layer for
+1. **Keep it small.** Six endpoints, one table, ~10 classes. No service layer for
    CRUD — the controller calls the repository directly.
 2. **Reachability is transient.** Check results are computed on demand and
    returned. Nothing is persisted. There is no history table.
@@ -425,7 +425,7 @@ must comfortably exceed that, or a normal slow check returns a gateway timeout.
 
 Build and verify in this sequence:
 
-1. **Phase 1** — `schema.sql`, entity, repository, and the three CRUD endpoints
+1. **Phase 1** — `schema.sql`, entity, repository, and the four CRUD endpoints
    with validation and the exception handler. Verify with curl; no probing code
    yet.
 2. **Phase 2** — probe a *single* server sequentially, exercised from a test.
