@@ -342,12 +342,15 @@ diverge the first time one of them changed.
 `application.yml`:
 
 ```yaml
+server:
+  port: ${SERVER_PORT:8080}
+
 spring:
   threads:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://localhost:5432/serverregistry
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/serverregistry}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
   sql:
@@ -364,8 +367,12 @@ spring:
     # so a request-scoped session buys nothing. Off explicitly to silence the warning.
     open-in-view: false
 
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+
 healthcheck:
-  timeout-ms: 3000
+  timeout-ms: ${HEALTHCHECK_TIMEOUT_MS:3000}
 ```
 
 `spring.threads.virtual.enabled: true` puts Tomcat request handling on virtual
@@ -373,6 +380,10 @@ threads. That is separate from — and does not replace — the executor in
 `HealthCheckService`.
 
 Bind `healthcheck.timeout-ms` with `@ConfigurationProperties` or `@Value`.
+
+Every key here is `${ENV_VAR:development-default}` (§14) — the literal
+defaults above are what a bare `mvn spring-boot:run` uses with no setup;
+deployment overrides them through the environment and never edits this file.
 
 ---
 
