@@ -137,6 +137,13 @@ No parameters. Returns a JSON array of the same object shape as 4.1, ordered by
 `createdAt` descending (newest first). Empty array when there are no rows.
 No pagination.
 
+No ceiling is enforced anywhere — not in the query, not in the response. Every
+row comes back in one array on every call. That is deliberate for a hand-run
+admin registry (§13: pagination was considered and excluded), not a promise
+that this scales unbounded: a UI rendering the full list on every request
+should expect this to degrade with row count, since there's nothing here to
+page against if it does.
+
 The ordering comes from `ServerRepository.NEWEST_FIRST`, the shared constant
 described in §8 — not from a sort declared here.
 
@@ -152,6 +159,12 @@ unchanged.
 
 Errors: `400` validation failure, `404` if the id does not exist, `409`
 duplicate `(ipAddress, port)` (checked against every *other* row).
+
+These are not checked simultaneously. `@Valid` runs on the method parameter
+before the controller body executes, so a validation failure always returns
+`400` even when the path id also doesn't exist — the `404` lookup is only
+reached once the request body itself is well-formed and valid. An update to
+an unknown id with an otherwise-valid body is the only way to see `404`.
 
 ### 4.4 Delete — `DELETE /api/servers/{id}`
 
@@ -232,6 +245,34 @@ The IP pattern must reject invalid octets such as `10.0.1.256`. A typo saved
 successfully would surface later as a permanently unreachable server, which is a
 confusing way to discover it.
 
+The pattern, verbatim from `ServerRequest`, for anything mirroring this
+validation client-side:
+
+```java
+private static final String IPV4 =
+        "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}";
+
+private static final String IPV6 =
+        "([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"
+        + "|([0-9a-fA-F]{1,4}:){1,7}:"
+        + "|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+        + "|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}"
+        + "|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}"
+        + "|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}"
+        + "|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}"
+        + "|[0-9a-fA-F]{1,4}:(:[0-9a-fA-F]{1,4}){1,6}"
+        + "|:((:[0-9a-fA-F]{1,4}){1,7}|:)"
+        + "|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+"
+        + "|::(ffff(:0{1,4})?:)?(" + IPV4 + ")"
+        + "|([0-9a-fA-F]{1,4}:){1,4}:(" + IPV4 + ")";
+
+static final String IP_ADDRESS = "^(" + IPV4 + "|" + IPV6 + ")$";
+```
+
+IPv4 (dotted-quad, each octet 0–255) or IPv6 — full form, every `::`-compressed
+shorthand, zone-id link-local (`fe80::1%eth0`), and IPv4-mapped IPv6
+(`::ffff:10.0.1.20`) are all accepted.
+
 ---
 
 ## 6. Error response format
@@ -248,7 +289,12 @@ All 4xx responses use one shape:
 ```
 
 `errors` is omitted for non-validation failures, and sorted when present so the
-array is deterministic and can be asserted on directly.
+array is deterministic and can be asserted on directly. Every entry is always
+`field: message` — `GlobalExceptionHandler.describe()` builds every one of them
+by concatenating `FieldError.getField()` and `getDefaultMessage()` with `": "`,
+with no exception. Safe to split on the first `": "` to attach a message to its
+input; a global (non-field) validation error, if one is ever added, would use
+its object name as the prefix instead, so the split still holds.
 
 Handled in a single `@RestControllerAdvice`:
 
@@ -263,6 +309,14 @@ Handled in a single `@RestControllerAdvice`:
 bind at all — `{"port": "abc"}`, or truncated JSON. It happens before validation
 runs, so without this handler those requests would return Spring's default error
 body and break the rule that *all* 4xx share one shape.
+
+**5xx is out of scope for this shape.** `GlobalExceptionHandler` handles exactly
+the four exceptions above; anything else — a lost database connection mid-request,
+an unanticipated `RuntimeException` — falls through to Spring Boot's own default
+error body (`{"timestamp", "status", "error", "path"}`, no `message` or `errors`
+field), not the `ErrorResponse` record. None of §§1–13 describes a codepath that
+should reach it; if a client observes one, that is a bug being reported, not a
+documented response to build a UI branch around.
 
 ---
 
@@ -620,6 +674,15 @@ precondition of deploying, not a stage of it.
 publicly bound port is an unauthenticated port scanner pointed at the internal
 network. Widening `APP_BIND` is a decision that requires something else to be
 authenticating the caller first.
+
+**`cors.allowed-origins` (§9) and the loopback bind above describe the same
+deployment, from two sides.** A browser on another machine can only reach this
+API at all through whatever reverse proxy or VPN fronts the loopback-bound
+container — and `ALLOWED_ORIGINS` has to name *that proxy's public origin*, not
+`127.0.0.1`, since the browser's `Origin` header is wherever the UI was served
+from, not wherever the API ends up. Nothing here names or configures that
+proxy; it is the same externally-provided piece the loopback-bind note above
+already assumes, just now load-bearing for two settings instead of one.
 
 **Egress is deliberately unrestricted.** The systemd unit is otherwise hardened
 (`ProtectSystem=strict`, `NoNewPrivileges`, read-only filesystem — the app writes
