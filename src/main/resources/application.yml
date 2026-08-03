@@ -7,7 +7,7 @@
 # The credential defaults are deliberately *not* removed to force an override. An
 # unresolvable placeholder fails at context startup, which would break both local runs
 # and the integration test. Enforcement belongs one layer out, where the deployment
-# knows it is production: compose.yaml and the systemd env file both refuse to start
+# knows it is production: compose.prod.yaml and the systemd env file both refuse to start
 # without DB_PASSWORD set explicitly.
 #
 server:

@@ -62,6 +62,55 @@ widening it.
 
 ## Other ways to run it
 
-- **systemd** — runs the jar directly, no Docker. See `deploy/server-registry.service`.
-  Same three env vars, but set in `/etc/server-registry.env`, and `DB_URL` should point at
-  `localhost` rather than `host.docker.internal` since there's no container in the way.
+### systemd
+
+Runs the jar directly, no Docker. `deploy/server-registry.service` expects the pieces
+below already in place — none of this happens automatically.
+
+1. Build the jar and place it where the unit expects. Maven names it
+   `server-registry-<version>.jar`; the unit hardcodes `app.jar`, so rename it on the way in:
+
+   ```bash
+   JAVA_HOME=~/.sdkman/candidates/java/21.0.7-tem mvn -B -DskipTests package
+   sudo mkdir -p /opt/server-registry
+   sudo cp target/server-registry-*.jar /opt/server-registry/app.jar
+   sudo cp server_registry_api.md /opt/server-registry/server_registry_api.md
+   ```
+
+2. Create the system user the unit runs as (`User=serverregistry` /
+   `Group=serverregistry`) and hand it the directory:
+
+   ```bash
+   sudo useradd --system --no-create-home --shell /usr/sbin/nologin serverregistry
+   sudo chown -R serverregistry:serverregistry /opt/server-registry
+   ```
+
+3. Set the connection — same three env vars as step 2 above, but as a root-owned,
+   `0600` file at `/etc/server-registry.env` (the unit's `EnvironmentFile`), and `DB_URL`
+   should point at `localhost` rather than `host.docker.internal` since there's no
+   container in the way:
+
+   ```bash
+   sudo cp .env.example /etc/server-registry.env
+   sudo $EDITOR /etc/server-registry.env   # DB_URL=jdbc:postgresql://localhost:5432/<db-name>, DB_USER, DB_PASSWORD
+   sudo chown root:root /etc/server-registry.env
+   sudo chmod 0600 /etc/server-registry.env
+   ```
+
+4. Install and start the unit:
+
+   ```bash
+   sudo cp deploy/server-registry.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now server-registry
+   ```
+
+5. Check it:
+
+   ```bash
+   sudo systemctl status server-registry     # active (running)
+   curl -fsS localhost:8080/api/servers      # []
+   ```
+
+Redeploying a new version: repeat step 1's build-and-copy, then
+`sudo systemctl restart server-registry`.

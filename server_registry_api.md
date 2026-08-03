@@ -296,7 +296,7 @@ not grow with the number of servers.
 ## 8. Project structure
 
 ```
-src/main/java/com/example/serverregistry/
+src/main/java/com/gdce/serverregistry/
 ├── ServerRegistryApplication.java
 ├── Server.java                  entity
 ├── ServerRepository.java        JpaRepository + one @Query + the shared Sort
@@ -585,15 +585,16 @@ nothing to disk) but sets no `IPAddressDeny`, because reaching arbitrary
 registered addresses is the product. Which targets are legitimate is a network
 question, so it is answered with firewall rules rather than in the unit file.
 
-**Both containers are capped, and the cap is what sizes the heap.** One core and
-768 MB for the app, one core and 512 MB for the database, all four overridable
-from `.env`; the systemd unit sets the same figures as `MemoryMax` and
-`CPUQuota`. The app is given `-XX:MaxRAMPercentage=75` rather than a fixed
-`-Xmx` so that the two cannot drift apart — a limit raised in one place raises
-the heap with it, and there is no second number to forget. A CPU cap is close to
-free here: `POST /api/servers/check` spawns a virtual thread per registered
-server, but they spend the probe blocked on a socket, so capping cores makes a
-large fan-out slower to start and not slower to finish.
+**The app container is capped, and the cap is what sizes the heap.** One core
+and 768 MB, both overridable from `.env` (`APP_CPU_LIMIT`, `APP_MEMORY_LIMIT`);
+the systemd unit sets the same figures as `MemoryMax` and `CPUQuota`. The app is
+given `-XX:MaxRAMPercentage=75` rather than a fixed `-Xmx` so that the two
+cannot drift apart — a limit raised in one place raises the heap with it, and
+there is no second number to forget. A CPU cap is close to free here: `POST
+/api/servers/check` spawns a virtual thread per registered server, but they
+spend the probe blocked on a socket, so capping cores makes a large fan-out
+slower to start and not slower to finish. There is no database container to cap
+here — the operator's PostgreSQL is outside compose entirely (§14 above).
 
 The IDE will underline `memory: ${APP_MEMORY_LIMIT:-768m}`. The Compose schema
 requires that field to match `^[0-9]+(b|k|m|g|kb|mb|gb)?$` and does not account

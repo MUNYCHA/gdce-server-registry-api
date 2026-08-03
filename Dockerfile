@@ -13,7 +13,7 @@ COPY src ./src
 
 # Tests are skipped on purpose. The integration test needs a Docker daemon to start a
 # PostgreSQL container (contract §12), which is not available inside an image build. Run
-# `mvn test` on a machine with Docker before building — see deploy/README.md.
+# `mvn test` on a machine with Docker before building — see README.md.
 RUN mvn -B -q -DskipTests package \
     && mv target/server-registry-*.jar /build/app.jar
 
