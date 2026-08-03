@@ -114,7 +114,7 @@ the file.
 ## Layout
 
 ```
-src/main/java/com/gdce/serverregistry/   10 classes, packaged by capability (server/, reachability/)
+src/main/java/com/gdce/serverregistry/   11 classes, packaged by capability (server/, reachability/)
 src/main/resources/application.yml       all config, env-driven
 src/main/resources/schema.sql            CREATE TABLE IF NOT EXISTS, run at startup
 Dockerfile  .env.example                 builds and configures the container

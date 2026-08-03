@@ -37,7 +37,7 @@ probe would, without widening the dependency list (§14).
 
 ## 2. Design principles
 
-1. **Keep it small.** Six endpoints, one table, ~10 classes. No service layer for
+1. **Keep it small.** Six endpoints, one table, ~11 classes. No service layer for
    CRUD — the controller calls the repository directly.
 2. **Reachability is transient.** Check results are computed on demand and
    returned. Nothing is persisted. There is no history table.
@@ -310,6 +310,7 @@ not grow with the number of servers.
 src/main/java/com/gdce/serverregistry/
 ├── ServerRegistryApplication.java
 ├── GlobalExceptionHandler.java     shared across every endpoint
+├── CorsConfig.java                 allows configured UI origins onto /api/**
 ├── server/                        the resource — CRUD only
 │   ├── Server.java                 entity
 │   ├── ServerRepository.java       JpaRepository + one @Query + the shared Sort
@@ -384,6 +385,9 @@ logging:
 
 healthcheck:
   timeout-ms: ${HEALTHCHECK_TIMEOUT_MS:3000}
+
+cors:
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
 ```
 
 `spring.threads.virtual.enabled: true` puts Tomcat request handling on virtual
@@ -391,6 +395,12 @@ threads. That is separate from — and does not replace — the executor in
 `HealthCheckService`.
 
 Bind `healthcheck.timeout-ms` with `@ConfigurationProperties` or `@Value`.
+
+`cors.allowed-origins` is a comma-separated list, bound in `CorsConfig`
+(`WebMvcConfigurer`) and applied to `/api/**` for `GET`, `POST`, `PUT`,
+`DELETE`. The defaults are the two common frontend dev-server ports (Vite,
+CRA); a real deployment overrides this to the UI's actual origin the same way
+it overrides `DB_URL` — through the environment, never by editing the file.
 
 Every key here is `${ENV_VAR:development-default}` (§14) — the literal
 defaults above are what a bare `mvn spring-boot:run` uses with no setup;

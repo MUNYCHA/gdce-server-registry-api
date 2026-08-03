@@ -51,6 +51,13 @@ interface that's an unauthenticated port scanner pointed at your network. The co
 binds to `127.0.0.1` by default (`APP_BIND`); put a reverse proxy or VPN in front before
 widening it.
 
+**Set `ALLOWED_ORIGINS` to the real frontend's origin.** It defaults to the two common
+local dev-server ports (`http://localhost:5173,http://localhost:3000`), which is only
+useful while a UI developer runs against this deployment from their own machine. Once the
+frontend is itself deployed somewhere, override it in `.env` to that origin — otherwise
+the browser blocks every request with a CORS error and nothing shows up in this app's own
+logs, because the browser rejects the response before JavaScript ever sees it.
+
 **If it won't start**, `docker compose -f compose.prod.yaml logs -f app`:
 
 | In the logs | Cause |

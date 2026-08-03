@@ -22,6 +22,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       HEALTHCHECK_TIMEOUT_MS: ${HEALTHCHECK_TIMEOUT_MS:-3000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
     # Bound to loopback. The API has no authentication and POST /api/servers/check will
     # TCP-connect to any address it is given, so publishing this port on a public
     # interface hands an unauthenticated port scanner to the internet. Put a reverse proxy

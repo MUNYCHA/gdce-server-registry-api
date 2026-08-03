@@ -40,3 +40,6 @@ logging:
 
 healthcheck:
   timeout-ms: ${HEALTHCHECK_TIMEOUT_MS:3000}
+
+cors:
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
