@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Server Registry & Reachability API",
+    "name": "GDCE Server Registry & Reachability API",
     "description": "Admin API for registering servers and testing reachability.\n\nSet `baseUrl` to wherever the app is running (compose binds to 127.0.0.1:8080 by default).\n\n`Create` stores the new id in the `serverId` collection variable, so `Delete` works straight after it without editing the URL.\n\nContract: server_registry_api.md in the repository root.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
