@@ -1,4 +1,4 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.server;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -21,11 +21,9 @@ public class ServerController {
     private static final int DEFAULT_PORT = 22;
 
     private final ServerRepository repository;
-    private final HealthCheckService healthCheckService;
 
-    public ServerController(ServerRepository repository, HealthCheckService healthCheckService) {
+    public ServerController(ServerRepository repository) {
         this.repository = repository;
-        this.healthCheckService = healthCheckService;
     }
 
     @PostMapping
@@ -44,17 +42,6 @@ public class ServerController {
         return repository.findAll(ServerRepository.NEWEST_FIRST).stream()
                 .map(ServerResponse::from)
                 .toList();
-    }
-
-    /**
-     * Tests every registered server and returns the results.
-     *
-     * <p>Always {@code 200} when the probing itself ran, including when every server is
-     * unreachable: servers being down is the answer, not an error condition.
-     */
-    @PostMapping("/check")
-    public List<CheckResult> check() {
-        return healthCheckService.checkAll();
     }
 
     /** Distinct types in use, so the admin form can suggest them without restricting input. */

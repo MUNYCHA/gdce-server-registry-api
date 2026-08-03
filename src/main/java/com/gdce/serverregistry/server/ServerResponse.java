@@ -1,4 +1,4 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.server;
 
 import java.time.Instant;
 

@@ -1,4 +1,4 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.server;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

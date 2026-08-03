@@ -1,5 +1,8 @@
 package com.gdce.serverregistry;
 
+import com.gdce.serverregistry.reachability.HealthCheckService;
+import com.gdce.serverregistry.server.Server;
+import com.gdce.serverregistry.server.ServerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

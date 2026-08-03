@@ -298,23 +298,31 @@ not grow with the number of servers.
 ```
 src/main/java/com/gdce/serverregistry/
 ├── ServerRegistryApplication.java
-├── Server.java                  entity
-├── ServerRepository.java        JpaRepository + one @Query + the shared Sort
-├── ServerRequest.java           record, validation annotations
-├── ServerResponse.java          record
-├── CheckResult.java             record
-├── ServerController.java        all five endpoints
-├── HealthCheckService.java      the only class with real logic
-└── GlobalExceptionHandler.java
+├── GlobalExceptionHandler.java     shared across every endpoint
+├── server/                        the resource — CRUD only
+│   ├── Server.java                 entity
+│   ├── ServerRepository.java       JpaRepository + one @Query + the shared Sort
+│   ├── ServerRequest.java          record, validation annotations
+│   ├── ServerResponse.java         record
+│   └── ServerController.java       create / list / delete / types
+└── reachability/                  one capability, one folder
+    ├── HealthCheckService.java     the only class with real logic
+    ├── CheckResult.java            record
+    └── ReachabilityController.java POST /check only
 
 src/main/resources/
 ├── application.yml
 └── schema.sql
 ```
 
-`ServerController` calls `ServerRepository` directly for the three CRUD
-endpoints and delegates only `POST /check` to `HealthCheckService`. Do not
-create a `ServerService` — at this size it would only forward calls.
+Packages split by capability, not by technical layer — each folder owns its
+controller, its service (if it has one) and its own result type together, so
+a future capability (e.g. something beyond reachability) adds one sibling
+folder rather than touching four existing ones.
+
+`ServerController` calls `ServerRepository` directly for its four endpoints.
+`ReachabilityController` delegates its one endpoint to `HealthCheckService`.
+Do not create a `ServerService` — at this size it would only forward calls.
 
 The registry ordering lives on the repository as a shared constant:
 

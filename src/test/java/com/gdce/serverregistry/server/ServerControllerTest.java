@@ -1,4 +1,4 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.server;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,7 +16,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
@@ -37,10 +36,6 @@ class ServerControllerTest {
 
     @MockBean
     private ServerRepository repository;
-
-    /** Not scanned by {@code @WebMvcTest}; the controller would fail to construct without it. */
-    @MockBean
-    private HealthCheckService healthCheckService;
 
     @Test
     void createWithoutPortDefaultsTo22() throws Exception {
@@ -287,45 +282,6 @@ class ServerControllerTest {
                 .andExpect(jsonPath("$.errors").doesNotExist());
 
         verify(repository, never()).deleteById(anyLong());
-    }
-
-    @Test
-    void checkReturnsOneResultPerServer() throws Exception {
-        given(healthCheckService.checkAll()).willReturn(List.of(
-                new CheckResult(1L, "prod-db-01", "10.0.1.15", 5432, true, 12L, null),
-                new CheckResult(2L, "old-web", "10.0.2.9", 80, false, null, "connect timed out")));
-
-        mockMvc.perform(post("/api/servers/check"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].reachable").value(true))
-                .andExpect(jsonPath("$[0].latencyMs").value(12))
-                .andExpect(jsonPath("$[0].error").value(nullValue()))
-                .andExpect(jsonPath("$[1].reachable").value(false))
-                .andExpect(jsonPath("$[1].latencyMs").value(nullValue()))
-                .andExpect(jsonPath("$[1].error").value("connect timed out"));
-    }
-
-    /** Servers being down is the answer, not an error condition. */
-    @Test
-    void checkWithEverythingUnreachableStillReturns200() throws Exception {
-        given(healthCheckService.checkAll()).willReturn(List.of(
-                new CheckResult(1L, "a", "10.255.255.1", 22, false, null, "connect timed out"),
-                new CheckResult(2L, "b", "10.255.255.2", 22, false, null, "connect timed out")));
-
-        mockMvc.perform(post("/api/servers/check"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].reachable").value(false))
-                .andExpect(jsonPath("$[1].reachable").value(false));
-    }
-
-    @Test
-    void checkOnEmptyRegistryReturnsEmptyArray() throws Exception {
-        given(healthCheckService.checkAll()).willReturn(List.of());
-
-        mockMvc.perform(post("/api/servers/check"))
-                .andExpect(status().isOk())
-                .andExpect(content().json("[]"));
     }
 
     /** Mimics what the database does on insert: assigns the id and created_at. */

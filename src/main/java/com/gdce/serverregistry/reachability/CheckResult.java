@@ -1,4 +1,6 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.reachability;
+
+import com.gdce.serverregistry.server.Server;
 
 /**
  * Outcome of one reachability probe. Never persisted — see design principle 2.

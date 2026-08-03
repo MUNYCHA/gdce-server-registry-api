@@ -113,7 +113,7 @@ the file.
 ## Layout
 
 ```
-src/main/java/com/gdce/serverregistry/   9 classes, one flat package
+src/main/java/com/gdce/serverregistry/   10 classes, packaged by capability (server/, reachability/)
 src/main/resources/application.yml       all config, env-driven
 src/main/resources/schema.sql            CREATE TABLE IF NOT EXISTS, run at startup
 Dockerfile  .env.example                 builds and configures the container

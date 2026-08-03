@@ -1,5 +1,7 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.reachability;
 
+import com.gdce.serverregistry.server.Server;
+import com.gdce.serverregistry.server.ServerRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
