@@ -96,10 +96,12 @@ reachable. Results are never stored — the registry holds servers, not a histor
 
 ## Deploying
 
-`deploy/README.md` is the operational guide. Two supported paths, reading identical
+`deploy/README.md` is the operational guide. Three supported paths, reading identical
 environment variables:
 
-- **Docker Compose** — brings its own PostgreSQL, needs nothing on the host but Docker.
+- **`compose.prod.yaml`** — the API in a container, against a PostgreSQL already running on
+  the host. The production path.
+- **`compose.yaml`** — brings its own PostgreSQL, needs nothing on the host but Docker.
 - **systemd** — runs the jar directly against a database you provide.
 
 Nothing operational is compiled in. Every value in `application.yml` is
@@ -120,7 +122,8 @@ the file.
 src/main/java/com/gdce/serverregistry/   9 classes, one flat package
 src/main/resources/application.yml       all config, env-driven
 src/main/resources/schema.sql            CREATE TABLE IF NOT EXISTS, run at startup
-compose.yaml  Dockerfile  .env.example   the Docker path
+compose.yaml  Dockerfile  .env.example   the Docker path, bundled PostgreSQL
+compose.prod.yaml                        the Docker path, PostgreSQL on the host
 deploy/                                  the systemd path, plus the deployment guide
 server_registry_api.md                   the contract
 ```

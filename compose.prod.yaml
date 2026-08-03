@@ -1,0 +1,57 @@
+# Production: the API only. PostgreSQL runs on the host as its own service.
+#
+# Use compose.yaml instead for local development — that one brings its own database.
+# This file deliberately has no `db` service, so nothing here creates or migrates a
+# database; it expects one to already exist and be reachable.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+services:
+  app:
+    build: .
+    # `localhost` inside a container is the container, not the host, so the host's
+    # PostgreSQL is not reachable by that name. host-gateway resolves
+    # host.docker.internal to the bridge gateway address, which is where the host is
+    # listening — see DB_URL in .env.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # No default: the database lives outside this file, so there is no service name to
+      # fall back to and a wrong guess would silently connect somewhere unintended.
+      DB_URL: ${DB_URL:?set DB_URL in .env}
+      DB_USER: ${DB_USER:?set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      HEALTHCHECK_TIMEOUT_MS: ${HEALTHCHECK_TIMEOUT_MS:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Bound to loopback. The API has no authentication and POST /api/servers/check will
+    # TCP-connect to any address it is given, so publishing this port on a public
+    # interface hands an unauthenticated port scanner to the internet. Put a reverse proxy
+    # or VPN in front and only widen APP_BIND once something else authenticates the caller.
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/servers/types"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Generous: a cold JVM plus schema.sql plus Hibernate's ddl-auto=validate. Failures
+      # during this window do not count against `retries`.
+      start_period: 60s
+    # With the database outside compose there is no depends_on to wait on. If PostgreSQL
+    # is down or unreachable the app exits at startup and is restarted here until it
+    # answers — a crash loop is the intended behaviour, not a misconfiguration.
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: ${APP_CPU_LIMIT:-1.0}
+          # The JVM reads this and sizes its heap to 75% of it (see Dockerfile).
+          #
+          # Your editor will underline this line. The Compose schema requires `memory` to
+          # match ^[0-9]+(b|k|m|g|kb|mb|gb)?$ and does not know about interpolation, but
+          # Docker substitutes the variable before validating and `docker compose config`
+          # passes. Do not "fix" it by hardcoding the value.
+          memory: ${APP_MEMORY_LIMIT:-768m}
+        reservations:
+          cpus: "0.25"
+          memory: 320m

@@ -553,9 +553,9 @@ section records only the decisions, so they are not re-litigated later.
 |---|---|
 | `Dockerfile` | Multi-stage: Maven + JDK 21 builds, `21-jre` runs, unprivileged user |
 | `compose.yaml` | App plus `postgres:15`, private network, named volume |
-| `.env.example` | Template for the compose variables; `.env` is gitignored |
+| `compose.prod.yaml` | App only, against a PostgreSQL already running on the host |
+| `.env.example` | Template for all three paths — also installed as `/etc/server-registry.env`; `.env` is gitignored |
 | `deploy/server-registry.service` | systemd unit for the jar-on-a-VM path |
-| `deploy/server-registry.env.example` | Template for `/etc/server-registry.env` |
 
 **No configuration is compiled in.** Every operational value in
 `application.yml` is `${ENV_VAR:development-default}`. The defaults are what
