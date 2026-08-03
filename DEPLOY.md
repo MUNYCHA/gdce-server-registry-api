@@ -21,6 +21,13 @@ DB_USER=<db-user>
 DB_PASSWORD=<db-password>
 ```
 
+`<db-host>` depends on where Postgres actually runs:
+
+| Where Postgres runs | `<db-host>` |
+|---|---|
+| On the host directly, or in Docker with a published port | `host.docker.internal` |
+| In Docker, no published port | its container name — and this app's container must join that network; ask the admin for both |
+
 ## 3. Run it
 
 ```bash
