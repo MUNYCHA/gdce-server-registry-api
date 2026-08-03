@@ -178,6 +178,24 @@
           }
         },
         {
+          "name": "409 — seed (create the row this test collides with)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/servers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "servers"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hostname\": \"dup-seed\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Own dedicated (ipAddress, port) — not the one from the top-level 'Create server' request, which 'Delete server' removes earlier in a full collection run. Keeping this pair local to the folder means the 409 test below works whether you run the whole collection or just this folder on its own."
+          }
+        },
+        {
           "name": "409 — duplicate IP and port",
           "request": {
             "method": "POST",
@@ -189,10 +207,10 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"prod-db-01-again\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "raw": "{\n  \"hostname\": \"dup-seed-again\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "409 once the first Create request has run. Same (ipAddress, port), different hostname — hostname is a display label and carries no uniqueness."
+            "description": "409, using the row the seed request just created. Same (ipAddress, port), different hostname — hostname is a display label and carries no uniqueness."
           }
         },
         {
