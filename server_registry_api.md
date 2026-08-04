@@ -363,8 +363,10 @@ not grow with the number of servers.
 ```
 src/main/java/com/gdce/serverregistry/
 ├── ServerRegistryApplication.java
-├── GlobalExceptionHandler.java     shared across every endpoint
-├── CorsConfig.java                 allows configured UI origins onto /api/**
+├── error/
+│   └── GlobalExceptionHandler.java shared across every endpoint
+├── config/
+│   └── CorsConfig.java             allows configured UI origins onto /api/**
 ├── server/                        the resource — CRUD only
 │   ├── Server.java                 entity
 │   ├── ServerRepository.java       JpaRepository + one @Query + the shared Sort

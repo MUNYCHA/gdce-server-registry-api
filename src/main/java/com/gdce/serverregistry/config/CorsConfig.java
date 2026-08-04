@@ -1,4 +1,4 @@
-package com.gdce.serverregistry;
+package com.gdce.serverregistry.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
