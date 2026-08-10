@@ -29,6 +29,10 @@ public class Server {
     @Column(name = "server_type", nullable = false, length = 30)
     private String serverType;
 
+    /** Free-form label identifying the system this server belongs to, for grouping in the UI. */
+    @Column(name = "system_name", nullable = false, length = 60)
+    private String systemName;
+
     @Column(name = "port", nullable = false)
     private int port;
 
@@ -41,10 +45,11 @@ public class Server {
         // for JPA
     }
 
-    public Server(String hostname, String ipAddress, String serverType, int port) {
+    public Server(String hostname, String ipAddress, String serverType, String systemName, int port) {
         this.hostname = hostname;
         this.ipAddress = ipAddress;
         this.serverType = serverType;
+        this.systemName = systemName;
         this.port = port;
     }
 
@@ -62,6 +67,10 @@ public class Server {
 
     public String getServerType() {
         return serverType;
+    }
+
+    public String getSystemName() {
+        return systemName;
     }
 
     public int getPort() {
@@ -82,6 +91,10 @@ public class Server {
 
     public void setServerType(String serverType) {
         this.serverType = serverType;
+    }
+
+    public void setSystemName(String systemName) {
+        this.systemName = systemName;
     }
 
     public void setPort(int port) {

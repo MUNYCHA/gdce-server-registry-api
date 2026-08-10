@@ -34,6 +34,7 @@ public class ServerController {
                 request.hostname(),
                 request.ipAddress(),
                 request.serverType(),
+                request.systemName(),
                 request.port() == null ? DEFAULT_PORT : request.port());
         return ServerResponse.from(repository.save(server));
     }
@@ -51,6 +52,12 @@ public class ServerController {
         return repository.findDistinctServerTypes();
     }
 
+    /** Distinct systems in use, so the admin form can suggest them without restricting input. */
+    @GetMapping("/systems")
+    public List<String> systems() {
+        return repository.findDistinctSystemNames();
+    }
+
     @PutMapping("/{id}")
     public ServerResponse update(@PathVariable Long id, @Valid @RequestBody ServerRequest request) {
         Server server = repository.findById(id)
@@ -58,6 +65,7 @@ public class ServerController {
         server.setHostname(request.hostname());
         server.setIpAddress(request.ipAddress());
         server.setServerType(request.serverType());
+        server.setSystemName(request.systemName());
         server.setPort(request.port() == null ? DEFAULT_PORT : request.port());
         return ServerResponse.from(repository.save(server));
     }

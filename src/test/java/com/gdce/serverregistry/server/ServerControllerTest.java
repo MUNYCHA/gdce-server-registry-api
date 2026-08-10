@@ -46,13 +46,14 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB"}
+                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.hostname").value("prod-db-01"))
                 .andExpect(jsonPath("$.ipAddress").value("10.0.1.15"))
                 .andExpect(jsonPath("$.serverType").value("DB"))
+                .andExpect(jsonPath("$.systemName").value("CORE"))
                 .andExpect(jsonPath("$.port").value(22))
                 .andExpect(jsonPath("$.createdAt").value("2026-07-28T09:12:03Z"));
 
@@ -68,7 +69,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB","port":5432}
+                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.port").value(5432));
@@ -82,7 +83,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB","port":5432}
+                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
@@ -95,7 +96,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"prod-db-01","ipAddress":"10.0.1.256","serverType":"DB"}
+                                {"hostname":"prod-db-01","ipAddress":"10.0.1.256","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
@@ -112,7 +113,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"v6","ipAddress":"2001:db8::1","serverType":"WEB","port":80}
+                                {"hostname":"v6","ipAddress":"2001:db8::1","serverType":"WEB","systemName":"CORE","port":80}
                                 """))
                 .andExpect(status().isCreated());
     }
@@ -124,7 +125,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"queue-01","ipAddress":"10.0.1.15","serverType":"KAFKA"}
+                                {"hostname":"queue-01","ipAddress":"10.0.1.15","serverType":"KAFKA","systemName":"CORE"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.serverType").value("KAFKA"));
@@ -137,7 +138,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"  db  "}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"  db  ","systemName":"CORE"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.serverType").value("DB"));
@@ -152,7 +153,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":""}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"","systemName":"CORE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("serverType: must not be blank"));
@@ -165,7 +166,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"   "}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"   ","systemName":"CORE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("serverType: must not be blank"));
@@ -178,7 +179,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"%s"}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"%s","systemName":"CORE"}
                                 """.formatted("X".repeat(31))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("serverType: size must be between 0 and 30"));
@@ -191,10 +192,23 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"  ","ipAddress":"10.0.1.15","serverType":"DB"}
+                                {"hostname":"  ","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("hostname: must not be blank"));
+    }
+
+    @Test
+    void blankSystemNameReturns400() throws Exception {
+        mockMvc.perform(post("/api/servers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"  "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]").value("systemName: must not be blank"));
+
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -202,7 +216,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","port":0}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":0}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("port: must be greater than or equal to 1"));
@@ -213,7 +227,7 @@ class ServerControllerTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","port":70000}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":70000}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("port: must be less than or equal to 65535"));
@@ -221,8 +235,8 @@ class ServerControllerTest {
 
     @Test
     void listReturnsNewestFirst() throws Exception {
-        Server older = persisted(new Server("old", "10.0.2.9", "WEB", 80), 1L);
-        Server newer = persisted(new Server("new", "10.0.1.15", "DB", 5432), 2L);
+        Server older = persisted(new Server("old", "10.0.2.9", "WEB", "SYS", 80), 1L);
+        Server newer = persisted(new Server("new", "10.0.1.15", "DB", "SYS", 5432), 2L);
         given(repository.findAll(any(Sort.class))).willReturn(List.of(newer, older));
 
         mockMvc.perform(get("/api/servers"))
@@ -264,21 +278,40 @@ class ServerControllerTest {
     }
 
     @Test
+    void systemsReturnsDistinctValuesSorted() throws Exception {
+        given(repository.findDistinctSystemNames()).willReturn(List.of("BILLING", "CORE", "PAYMENTS"));
+
+        mockMvc.perform(get("/api/servers/systems"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[\"BILLING\",\"CORE\",\"PAYMENTS\"]", true));
+    }
+
+    @Test
+    void systemsOnEmptyRegistryReturnsEmptyArray() throws Exception {
+        given(repository.findDistinctSystemNames()).willReturn(List.of());
+
+        mockMvc.perform(get("/api/servers/systems"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
     void updateExistingAppliesAllFields() throws Exception {
-        Server existing = persisted(new Server("old-host", "10.0.1.15", "WEB", 80), 1L);
+        Server existing = persisted(new Server("old-host", "10.0.1.15", "WEB", "SYS", 80), 1L);
         given(repository.findById(1L)).willReturn(Optional.of(existing));
         given(repository.save(any(Server.class))).willAnswer(call -> call.getArgument(0));
 
         mockMvc.perform(put("/api/servers/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"new-host","ipAddress":"10.0.2.9","serverType":"DB","port":5432}
+                                {"hostname":"new-host","ipAddress":"10.0.2.9","serverType":"DB","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.hostname").value("new-host"))
                 .andExpect(jsonPath("$.ipAddress").value("10.0.2.9"))
                 .andExpect(jsonPath("$.serverType").value("DB"))
+                .andExpect(jsonPath("$.systemName").value("CORE"))
                 .andExpect(jsonPath("$.port").value(5432));
 
         verify(repository).save(existing);
@@ -286,14 +319,14 @@ class ServerControllerTest {
 
     @Test
     void updateWithoutPortDefaultsTo22() throws Exception {
-        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", 80), 1L);
+        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", "SYS", 80), 1L);
         given(repository.findById(1L)).willReturn(Optional.of(existing));
         given(repository.save(any(Server.class))).willAnswer(call -> call.getArgument(0));
 
         mockMvc.perform(put("/api/servers/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB"}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.port").value(22));
@@ -306,7 +339,7 @@ class ServerControllerTest {
         mockMvc.perform(put("/api/servers/999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB"}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
@@ -317,7 +350,7 @@ class ServerControllerTest {
 
     @Test
     void updateToDuplicateIpAndPortReturns409() throws Exception {
-        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", 80), 1L);
+        Server existing = persisted(new Server("h", "10.0.1.15", "WEB", "SYS", 80), 1L);
         given(repository.findById(1L)).willReturn(Optional.of(existing));
         given(repository.save(any(Server.class)))
                 .willThrow(new DataIntegrityViolationException("uq_servers_ip_port"));
@@ -325,7 +358,7 @@ class ServerControllerTest {
         mockMvc.perform(put("/api/servers/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.2.9","serverType":"DB","port":5432}
+                                {"hostname":"h","ipAddress":"10.0.2.9","serverType":"DB","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
@@ -337,7 +370,7 @@ class ServerControllerTest {
         mockMvc.perform(put("/api/servers/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.256","serverType":"DB"}
+                                {"hostname":"h","ipAddress":"10.0.1.256","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]").value("ipAddress: must be a valid IP address"));

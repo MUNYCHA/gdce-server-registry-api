@@ -176,7 +176,7 @@ class HealthCheckServiceTest {
     }
 
     private static Server server(String hostname, String ipAddress, int port, long id) {
-        Server server = new Server(hostname, ipAddress, "OTHER", port);
+        Server server = new Server(hostname, ipAddress, "OTHER", "SYS", port);
         ReflectionTestUtils.setField(server, "id", id);
         return server;
     }

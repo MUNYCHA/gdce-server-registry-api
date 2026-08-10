@@ -23,6 +23,10 @@ public record ServerRequest(
         @Size(max = 30)
         String serverType,
 
+        @NotBlank
+        @Size(max = 60)
+        String systemName,
+
         @Min(1)
         @Max(65535)
         Integer port
@@ -34,6 +38,7 @@ public record ServerRequest(
      */
     public ServerRequest {
         serverType = serverType == null ? null : serverType.trim().toUpperCase(Locale.ROOT);
+        systemName = systemName == null ? null : systemName.trim();
     }
 
     /** Rejects out-of-range octets such as 10.0.1.256. */

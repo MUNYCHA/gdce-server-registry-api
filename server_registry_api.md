@@ -1,7 +1,7 @@
 # Server Registry & Reachability API — Contract
 
-An internal admin API. Admins register servers (hostname, IP, type, port) and can
-press one button to test whether every registered server is reachable.
+An internal admin API. Admins register servers (hostname, IP, type, system, port)
+and can press one button to test whether every registered server is reachable.
 
 This document is the spec. Build exactly what is here — see **Non-goals** before
 adding anything.
@@ -37,8 +37,8 @@ probe would, without widening the dependency list (§14).
 
 ## 2. Design principles
 
-1. **Keep it small.** Six endpoints, one table, ~11 classes. No service layer for
-   CRUD — the controller calls the repository directly.
+1. **Keep it small.** Seven endpoints, one table, ~11 classes. No service layer
+   for CRUD — the controller calls the repository directly.
 2. **Reachability is transient.** Check results are computed on demand and
    returned. Nothing is persisted. There is no history table.
 3. **The IP is what we connect to.** `hostname` is a human-readable display
@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS servers (
     hostname    VARCHAR(255) NOT NULL,
     ip_address  VARCHAR(45)  NOT NULL,
     server_type VARCHAR(30)  NOT NULL,
+    system_name VARCHAR(60)  NOT NULL,
     port        INT          NOT NULL DEFAULT 22,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CONSTRAINT uq_servers_ip_port UNIQUE (ip_address, port),
@@ -89,6 +90,18 @@ behaviour §12 requires — normalising after validation would let `"   "` throu
 Existing values are exposed through `GET /api/servers/types` (§4.6) so the form
 can suggest them without restricting input.
 
+### system_name groups servers for display
+
+Also free text, same reasoning as `server_type`: admins name the system a
+server belongs to (`"BILLING"`, `"PAYMENTS"`, ...) so the UI can group the
+registry by system. Unlike `server_type` it is **not** normalised to upper
+case — it is a display name rather than a short code, so `"Billing"` is stored
+and returned as typed. It is still trimmed in the same compact constructor, so
+a whitespace-only value collapses to `""` and is rejected by `@NotBlank` the
+same way.
+
+Existing values are exposed through `GET /api/servers/systems` (§4.7).
+
 ---
 
 ## 4. Endpoints
@@ -104,6 +117,7 @@ Request:
   "hostname": "prod-db-01",
   "ipAddress": "10.0.1.15",
   "serverType": "DB",
+  "systemName": "BILLING",
   "port": 5432
 }
 ```
@@ -119,6 +133,7 @@ Response `201 Created`:
   "hostname": "prod-db-01",
   "ipAddress": "10.0.1.15",
   "serverType": "DB",
+  "systemName": "BILLING",
   "port": 5432,
   "createdAt": "2026-07-28T09:12:03Z"
 }
@@ -228,6 +243,25 @@ List<String> findDistinctServerTypes();
 
 Empty registry returns `[]`. Response: `200 OK`.
 
+### 4.7 Distinct systems — `GET /api/servers/systems`
+
+Returns every `system_name` value currently in use, so the admin form can offer
+them as suggestions while still accepting new values, and the UI can group the
+registry by system.
+
+```json
+["BILLING", "CORE", "PAYMENTS"]
+```
+
+Backed by a single derived query on the repository:
+
+```java
+@Query("SELECT DISTINCT s.systemName FROM Server s ORDER BY s.systemName")
+List<String> findDistinctSystemNames();
+```
+
+Empty registry returns `[]`. Response: `200 OK`.
+
 ---
 
 ## 5. Validation
@@ -239,6 +273,7 @@ Applied to the `POST` request record with Bean Validation:
 | `hostname` | `@NotBlank`, `@Size(max = 255)` |
 | `ipAddress` | `@NotBlank`, `@Size(max = 45)`, `@Pattern` matching IPv4 or IPv6 |
 | `serverType` | `@NotBlank`, `@Size(max = 30)` — free text, uppercased on save |
+| `systemName` | `@NotBlank`, `@Size(max = 60)` — free text, trimmed but not uppercased |
 | `port` | nullable; when present `@Min(1) @Max(65535)` |
 
 The IP pattern must reject invalid octets such as `10.0.1.256`. A typo saved
@@ -513,6 +548,9 @@ together, every wrong result looks like a race condition.
 - [ ] `serverType: " db "` is stored and returned as `"DB"`.
 - [ ] `serverType: ""` returns `400`; any non-blank value up to 30 chars is accepted.
 - [ ] `GET /api/servers/types` returns each distinct value once, sorted.
+- [ ] `systemName: " Billing "` is stored and returned as `"Billing"` (trimmed, not uppercased).
+- [ ] `systemName: ""` returns `400`; any non-blank value up to 60 chars is accepted.
+- [ ] `GET /api/servers/systems` returns each distinct value once, sorted.
 - [ ] `port: 0` and `port: 70000` both return `400`.
 - [ ] `PUT /api/servers/{id}` on a non-existent id returns `404`.
 - [ ] `PUT /api/servers/{id}` to an `(ipAddress, port)` already used by a

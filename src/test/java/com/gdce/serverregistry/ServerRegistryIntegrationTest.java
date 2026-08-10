@@ -106,7 +106,7 @@ class ServerRegistryIntegrationTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":" db ","port":5432}
+                                {"hostname":"prod-db-01","ipAddress":"10.0.1.15","serverType":" db ","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isCreated());
 
@@ -115,6 +115,7 @@ class ServerRegistryIntegrationTest {
         assertThat(saved.getHostname()).isEqualTo("prod-db-01");
         assertThat(saved.getIpAddress()).isEqualTo("10.0.1.15");
         assertThat(saved.getServerType()).isEqualTo("DB");
+        assertThat(saved.getSystemName()).isEqualTo("CORE");
         assertThat(saved.getPort()).isEqualTo(5432);
     }
 
@@ -124,7 +125,7 @@ class ServerRegistryIntegrationTest {
      */
     @Test
     void createdAtIsPopulatedByTheDatabase() {
-        Server saved = repository.save(new Server("h", "10.0.1.15", "DB", 22));
+        Server saved = repository.save(new Server("h", "10.0.1.15", "DB", "SYS", 22));
 
         assertThat(saved.getCreatedAt())
                 .as("the DB default must have been read back after insert")
@@ -137,7 +138,7 @@ class ServerRegistryIntegrationTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB"}
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.port").value(22));
@@ -153,7 +154,7 @@ class ServerRegistryIntegrationTest {
     @Test
     void duplicateIpAndPortReturns409FromTheRealConstraint() throws Exception {
         String body = """
-                {"hostname":"first","ipAddress":"10.0.1.15","serverType":"DB","port":5432}
+                {"hostname":"first","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":5432}
                 """;
 
         mockMvc.perform(post("/api/servers").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -174,14 +175,14 @@ class ServerRegistryIntegrationTest {
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"a","ipAddress":"10.0.1.15","serverType":"DB","port":5432}
+                                {"hostname":"a","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE","port":5432}
                                 """))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/servers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"hostname":"b","ipAddress":"10.0.1.15","serverType":"WEB","port":80}
+                                {"hostname":"b","ipAddress":"10.0.1.15","serverType":"WEB","systemName":"CORE","port":80}
                                 """))
                 .andExpect(status().isCreated());
 
@@ -195,7 +196,7 @@ class ServerRegistryIntegrationTest {
      */
     @Test
     void checkConstraintRejectsAnOutOfRangePort() {
-        assertThatThrownBy(() -> repository.saveAndFlush(new Server("h", "10.0.1.15", "DB", 0)))
+        assertThatThrownBy(() -> repository.saveAndFlush(new Server("h", "10.0.1.15", "DB", "SYS", 0)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -205,15 +206,29 @@ class ServerRegistryIntegrationTest {
      */
     @Test
     void distinctTypesQueryReturnsEachValueOnceSorted() throws Exception {
-        repository.save(new Server("a", "10.0.1.1", "WEB", 80));
-        repository.save(new Server("b", "10.0.1.2", "DB", 5432));
-        repository.save(new Server("c", "10.0.1.3", "WEB", 8080));
+        repository.save(new Server("a", "10.0.1.1", "WEB", "SYS", 80));
+        repository.save(new Server("b", "10.0.1.2", "DB", "SYS", 5432));
+        repository.save(new Server("c", "10.0.1.3", "WEB", "SYS", 8080));
 
         mockMvc.perform(get("/api/servers/types"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0]").value("DB"))
                 .andExpect(jsonPath("$[1]").value("WEB"));
+    }
+
+    /** Same reasoning as the sibling test above, for {@link ServerRepository#findDistinctSystemNames()}. */
+    @Test
+    void distinctSystemNamesQueryReturnsEachValueOnceSorted() throws Exception {
+        repository.save(new Server("a", "10.0.1.1", "WEB", "BILLING", 80));
+        repository.save(new Server("b", "10.0.1.2", "DB", "CORE", 5432));
+        repository.save(new Server("c", "10.0.1.3", "WEB", "BILLING", 8080));
+
+        mockMvc.perform(get("/api/servers/systems"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0]").value("BILLING"))
+                .andExpect(jsonPath("$[1]").value("CORE"));
     }
 
     /**
@@ -223,8 +238,8 @@ class ServerRegistryIntegrationTest {
      */
     @Test
     void listIsOrderedNewestFirst() throws Exception {
-        repository.save(new Server("older", "10.0.1.1", "WEB", 80));
-        repository.save(new Server("newer", "10.0.1.2", "DB", 5432));
+        repository.save(new Server("older", "10.0.1.1", "WEB", "SYS", 80));
+        repository.save(new Server("newer", "10.0.1.2", "DB", "SYS", 5432));
 
         mockMvc.perform(get("/api/servers"))
                 .andExpect(status().isOk())
@@ -239,8 +254,8 @@ class ServerRegistryIntegrationTest {
     @Test
     void checkProbesRealRowsInListOrder() throws Exception {
         try (ServerSocket listening = new ServerSocket(0)) {
-            repository.save(new Server("down", BLACKHOLE_NET + "9", "WEB", BLACKHOLE_PORT));
-            repository.save(new Server("up", "127.0.0.1", "OTHER", listening.getLocalPort()));
+            repository.save(new Server("down", BLACKHOLE_NET + "9", "WEB", "SYS", BLACKHOLE_PORT));
+            repository.save(new Server("up", "127.0.0.1", "OTHER", "SYS", listening.getLocalPort()));
 
             mockMvc.perform(post("/api/servers/check"))
                     .andExpect(status().isOk())
@@ -264,7 +279,7 @@ class ServerRegistryIntegrationTest {
      */
     @Test
     void probeWaitsTheConfiguredTimeoutAndNotAHardcodedOne() throws Exception {
-        repository.save(new Server("black-hole", BLACKHOLE_NET + "5", "OTHER", BLACKHOLE_PORT));
+        repository.save(new Server("black-hole", BLACKHOLE_NET + "5", "OTHER", "SYS", BLACKHOLE_PORT));
 
         long startNanos = System.nanoTime();
         mockMvc.perform(post("/api/servers/check"))
@@ -325,7 +340,7 @@ class ServerRegistryIntegrationTest {
     void timeoutsDoNotAccumulateAcrossMoreServersThanTheConnectionPool() throws Exception {
         int servers = CONNECTION_POOL_SIZE + 2;
         for (int i = 1; i <= servers; i++) {
-            repository.save(new Server("down-" + i, BLACKHOLE_NET + i, "OTHER", BLACKHOLE_PORT));
+            repository.save(new Server("down-" + i, BLACKHOLE_NET + i, "OTHER", "SYS", BLACKHOLE_PORT));
         }
         long sequentialMs = (long) servers * configuredTimeoutMs;
 
@@ -353,7 +368,7 @@ class ServerRegistryIntegrationTest {
     /** Deleting a row that exists, against the real table rather than a stubbed existsById. */
     @Test
     void deleteRemovesTheRow() throws Exception {
-        Server saved = repository.save(new Server("doomed", "10.0.1.15", "DB", 22));
+        Server saved = repository.save(new Server("doomed", "10.0.1.15", "DB", "SYS", 22));
 
         mockMvc.perform(delete("/api/servers/" + saved.getId()))
                 .andExpect(status().isNoContent());

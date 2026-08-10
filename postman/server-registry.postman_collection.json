@@ -48,7 +48,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"hostname\": \"prod-db-01\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+          "raw": "{\n  \"hostname\": \"prod-db-01\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"BILLING\",\n  \"port\": 5432\n}",
           "options": { "raw": { "language": "json" } }
         },
         "description": "201 on success. `port` is optional and defaults to 22. 400 on validation failure, 409 when (ipAddress, port) is already registered."
@@ -66,7 +66,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"hostname\": \"bastion\",\n  \"ipAddress\": \"10.0.9.4\",\n  \"serverType\": \" ssh \"\n}",
+          "raw": "{\n  \"hostname\": \"bastion\",\n  \"ipAddress\": \"10.0.9.4\",\n  \"serverType\": \" ssh \",\n  \"systemName\": \"CORE\"\n}",
           "options": { "raw": { "language": "json" } }
         },
         "description": "`serverType` is trimmed and uppercased on the way in, so this saves as \"SSH\". Omitted `port` saves as 22."
@@ -97,7 +97,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"hostname\": \"prod-db-01-renamed\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"port\": 5433\n}",
+          "raw": "{\n  \"hostname\": \"prod-db-01-renamed\",\n  \"ipAddress\": \"10.0.1.15\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"BILLING\",\n  \"port\": 5433\n}",
           "options": { "raw": { "language": "json" } }
         },
         "description": "200 with the updated row. Full replace, not a patch — every field is required, same validation as Create. `serverId` is set by the Create request. 404 if the id does not exist, 409 if (ipAddress, port) collides with a different row."
@@ -114,6 +114,19 @@
           "path": ["api", "servers", "types"]
         },
         "description": "200 with each server_type value in use, sorted. Doubles as the container healthcheck endpoint — it exercises the web layer, JPA and a real database round trip."
+      }
+    },
+    {
+      "name": "Distinct systems",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/servers/systems",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "servers", "systems"]
+        },
+        "description": "200 with each system_name value in use, sorted. Lets the admin UI group servers by system and suggest existing names without restricting input."
       }
     },
     {
@@ -158,7 +171,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"typo-box\",\n  \"ipAddress\": \"10.0.1.256\",\n  \"serverType\": \"WEB\"\n}",
+              "raw": "{\n  \"hostname\": \"typo-box\",\n  \"ipAddress\": \"10.0.1.256\",\n  \"serverType\": \"WEB\",\n  \"systemName\": \"CORE\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "400 \"Validation failed\". A bad octet has to be caught here — saved successfully it would surface later as a permanently unreachable server."
@@ -176,7 +189,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"bad-port\",\n  \"ipAddress\": \"10.0.1.20\",\n  \"serverType\": \"WEB\",\n  \"port\": 70000\n}",
+              "raw": "{\n  \"hostname\": \"bad-port\",\n  \"ipAddress\": \"10.0.1.20\",\n  \"serverType\": \"WEB\",\n  \"systemName\": \"CORE\",\n  \"port\": 70000\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "400. Port must be between 1 and 65535."
@@ -194,7 +207,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"unbindable\",\n  \"ipAddress\": \"10.0.1.21\",\n  \"serverType\": \"WEB\",\n  \"port\": \"abc\"\n}",
+              "raw": "{\n  \"hostname\": \"unbindable\",\n  \"ipAddress\": \"10.0.1.21\",\n  \"serverType\": \"WEB\",\n  \"systemName\": \"CORE\",\n  \"port\": \"abc\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "400 \"Malformed request body\". Jackson cannot bind this, which happens before validation runs — hence a different message and no `errors` array."
@@ -212,7 +225,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"dup-seed\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "raw": "{\n  \"hostname\": \"dup-seed\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"CORE\",\n  \"port\": 5432\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "Own dedicated (ipAddress, port) — not the one from the top-level 'Create server' request, which 'Delete server' removes earlier in a full collection run. Keeping this pair local to the folder means the 409 test below works whether you run the whole collection or just this folder on its own."
@@ -230,7 +243,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"dup-seed-again\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "raw": "{\n  \"hostname\": \"dup-seed-again\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"CORE\",\n  \"port\": 5432\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "409, using the row the seed request just created. Same (ipAddress, port), different hostname — hostname is a display label and carries no uniqueness."
@@ -262,7 +275,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.97\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.97\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"CORE\",\n  \"port\": 5432\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "A row distinct from 'dup-seed' above, so it can be updated into a collision without touching that row."
@@ -280,7 +293,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"port\": 5432\n}",
+              "raw": "{\n  \"hostname\": \"update-me\",\n  \"ipAddress\": \"10.0.1.99\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"CORE\",\n  \"port\": 5432\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "409 — 'dup-seed' above already owns (10.0.1.99, 5432)."
@@ -298,7 +311,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"hostname\": \"ghost\",\n  \"ipAddress\": \"10.0.1.30\",\n  \"serverType\": \"DB\",\n  \"port\": 22\n}",
+              "raw": "{\n  \"hostname\": \"ghost\",\n  \"ipAddress\": \"10.0.1.30\",\n  \"serverType\": \"DB\",\n  \"systemName\": \"CORE\",\n  \"port\": 22\n}",
               "options": { "raw": { "language": "json" } }
             },
             "description": "404 \"No server with id 999999\"."

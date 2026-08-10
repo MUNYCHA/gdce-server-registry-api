@@ -17,4 +17,7 @@ public interface ServerRepository extends JpaRepository<Server, Long> {
 
     @Query("SELECT DISTINCT s.serverType FROM Server s ORDER BY s.serverType")
     List<String> findDistinctServerTypes();
+
+    @Query("SELECT DISTINCT s.systemName FROM Server s ORDER BY s.systemName")
+    List<String> findDistinctSystemNames();
 }

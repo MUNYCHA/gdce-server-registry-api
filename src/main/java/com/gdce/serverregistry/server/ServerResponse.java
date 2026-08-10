@@ -7,6 +7,7 @@ public record ServerResponse(
         String hostname,
         String ipAddress,
         String serverType,
+        String systemName,
         int port,
         Instant createdAt
 ) {
@@ -17,6 +18,7 @@ public record ServerResponse(
                 server.getHostname(),
                 server.getIpAddress(),
                 server.getServerType(),
+                server.getSystemName(),
                 server.getPort(),
                 server.getCreatedAt().toInstant());
     }

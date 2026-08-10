@@ -42,6 +42,7 @@ Base path `/api/servers`. No authentication — see the warning below.
 | `PUT` | `/api/servers/{id}` | Replace a server's fields → `200` |
 | `POST` | `/api/servers/check` | Probe every registered server → `200` |
 | `GET` | `/api/servers/types` | Distinct server types in use → `200` |
+| `GET` | `/api/servers/systems` | Distinct systems in use → `200` |
 | `DELETE` | `/api/servers/{id}` | Remove one → `204` |
 
 There is no trailing-slash form: `/api/servers` works, `/api/servers/` returns `404`.
@@ -49,11 +50,14 @@ Spring Boot 3 dropped that matching, and it was not added back.
 
 **Register a server.** `port` is optional and defaults to `22`; `serverType` is
 upper-cased and trimmed before it is stored, so `db`, `DB` and ` Db ` are one value.
+`systemName` groups servers for display (e.g. so a UI can group the registry by
+the system a server belongs to) — trimmed but not upper-cased, since it's a display
+name rather than a short code.
 
 ```bash
 curl -X POST localhost:8080/api/servers \
   -H 'Content-Type: application/json' \
-  -d '{"hostname":"web-01","ipAddress":"10.0.1.20","serverType":"WEB","port":80}'
+  -d '{"hostname":"web-01","ipAddress":"10.0.1.20","serverType":"WEB","systemName":"Billing","port":80}'
 ```
 
 ```json
@@ -62,6 +66,7 @@ curl -X POST localhost:8080/api/servers \
   "hostname": "web-01",
   "ipAddress": "10.0.1.20",
   "serverType": "WEB",
+  "systemName": "Billing",
   "port": 80,
   "createdAt": "2026-07-31T09:14:02.117Z"
 }
