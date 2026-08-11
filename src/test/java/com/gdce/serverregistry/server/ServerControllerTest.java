@@ -349,6 +349,21 @@ class ServerControllerTest {
     }
 
     @Test
+    void updateWithNonNumericIdReturns400() throws Exception {
+        mockMvc.perform(put("/api/servers/abc")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"hostname":"h","ipAddress":"10.0.1.15","serverType":"DB","systemName":"CORE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("id must be a valid number"))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+
+        verify(repository, never()).findById(any());
+    }
+
+    @Test
     void updateToDuplicateIpAndPortReturns409() throws Exception {
         Server existing = persisted(new Server("h", "10.0.1.15", "WEB", "SYS", 80), 1L);
         given(repository.findById(1L)).willReturn(Optional.of(existing));
@@ -398,6 +413,18 @@ class ServerControllerTest {
                 .andExpect(jsonPath("$.message").value("No server with id 999"))
                 .andExpect(jsonPath("$.errors").doesNotExist());
 
+        verify(repository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void deleteWithNonNumericIdReturns400() throws Exception {
+        mockMvc.perform(delete("/api/servers/abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("id must be a valid number"))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+
+        verify(repository, never()).existsById(any());
         verify(repository, never()).deleteById(anyLong());
     }
 

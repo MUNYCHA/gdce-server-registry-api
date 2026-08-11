@@ -339,6 +339,12 @@ Handled in a single `@RestControllerAdvice`:
 | `HttpMessageNotReadableException` | 400 — message: "Malformed request body" |
 | `DataIntegrityViolationException` | 409 — message: "A server with this IP and port already exists" |
 | `NoSuchElementException` (or custom not-found) | 404 — message: "No server with id {id}" |
+| `MethodArgumentTypeMismatchException` | 400 — message: "{name} must be a valid number" |
+
+`MethodArgumentTypeMismatchException` is what Spring raises resolving a path
+variable, e.g. `PUT /api/servers/abc` — before the request reaches validation
+or the controller. Without this handler those requests would return Spring's
+default error body instead of the shape above.
 
 `HttpMessageNotReadableException` is what Jackson raises for a body it cannot
 bind at all — `{"port": "abc"}`, or truncated JSON. It happens before validation
